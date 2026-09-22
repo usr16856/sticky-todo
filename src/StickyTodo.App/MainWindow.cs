@@ -323,9 +323,6 @@ internal sealed class MainWindow : Window {
                 hasDataError = false;
                 showStatus("已刪除 " + DateTime.Now.ToString("HH:mm"));
             }) { Owner = this };
-        editor.SetBinding(OpacityProperty, new System.Windows.Data.Binding(nameof(Opacity)) {
-            Source = this, Mode = System.Windows.Data.BindingMode.OneWay
-        });
         try { editor.ShowDialog(); } finally { editor = null; render(); }
     }
 

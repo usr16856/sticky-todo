@@ -25,6 +25,7 @@ internal static class Program {
             var saved = false;
             var editor = new EditorWindow("其他", "", false, () => ["SpotCam", projectName, "其他"],
                 (_, _) => saved = true, () => { });
+            check(!editor.AllowsTransparency && editor.Opacity == 1.0, "Editor must remain fully opaque");
             var root = (FrameworkElement)editor.Content;
             root.Measure(new Size(350, 520));
             root.Arrange(new Rect(0, 0, 350, 520));

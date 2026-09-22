@@ -44,7 +44,6 @@ internal sealed class EditorWindow : Window {
         ShowInTaskbar = false;
         var frame = new DockPanel { Background = Theme.paper };
         var caption = new WindowHeader(this, caption: null, showWindowControls: false);
-        AllowsTransparency = true;
         DockPanel.SetDock(caption, Dock.Top);
         frame.Children.Add(caption);
         var root = new DockPanel { Margin = new Thickness(18, 0, 18, 18) };
