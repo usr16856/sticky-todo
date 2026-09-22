@@ -41,6 +41,21 @@ public sealed class TodoDocument {
         getOrAddGroup(project).items.Add(new TodoItem(normalizeLines(content)));
     }
 
+    public void addToProjects(IEnumerable<string> projects, string content) {
+        validateContent(content);
+        var targets = projects.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (targets.Count == 0) {
+            throw new ArgumentException("請至少選擇一個專案。");
+        }
+        foreach (var project in targets) {
+            validateProject(project);
+        }
+        var item = new TodoItem(normalizeLines(content));
+        foreach (var project in targets) {
+            getOrAddGroup(project).items.Add(item);
+        }
+    }
+
     public void edit(string oldProject, int index, string newProject, string content) {
         validateContent(content);
         var source = groups.Single(group => group.name == oldProject);
@@ -68,6 +83,12 @@ public sealed class TodoDocument {
     private static void validateContent(string content) {
         if (string.IsNullOrWhiteSpace(content)) {
             throw new ArgumentException("請填寫待辦內容。");
+        }
+    }
+
+    private static void validateProject(string project) {
+        if (string.IsNullOrWhiteSpace(project) || project.Contains('\n') || project.Contains('\r')) {
+            throw new ArgumentException("專案名稱不可空白或包含換行。");
         }
     }
 }

@@ -80,6 +80,53 @@
         </Setter>
     </Style>
 
+    <Style x:Key="MinimalVerticalScrollBar" TargetType="ScrollBar">
+        <Setter Property="Width" Value="10"/>
+        <Setter Property="MinWidth" Value="10"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ScrollBar">
+                    <Grid Width="10" Background="Transparent">
+                        <Border Width="3" CornerRadius="1.5" Background="{StaticResource HoverSurface}"
+                                HorizontalAlignment="Center"/>
+                        <Track x:Name="PART_Track" Orientation="Vertical" IsDirectionReversed="True"
+                               Minimum="{TemplateBinding Minimum}" Maximum="{TemplateBinding Maximum}"
+                               Value="{TemplateBinding Value}" ViewportSize="{TemplateBinding ViewportSize}">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton Command="{x:Static ScrollBar.PageUpCommand}" Focusable="False">
+                                    <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template>
+                                </RepeatButton>
+                            </Track.DecreaseRepeatButton>
+                            <Track.Thumb>
+                                <Thumb Width="7" MinHeight="28" Cursor="Hand">
+                                    <Thumb.Template>
+                                        <ControlTemplate TargetType="Thumb">
+                                            <Border x:Name="thumb" Width="7" CornerRadius="3.5" Background="{StaticResource Accent}" Opacity="0.72"/>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="thumb" Property="Opacity" Value="0.9"/></Trigger>
+                                                <Trigger Property="IsDragging" Value="True"><Setter TargetName="thumb" Property="Background" Value="{StaticResource Ink}"/><Setter TargetName="thumb" Property="Opacity" Value="1"/></Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Thumb.Template>
+                                </Thumb>
+                            </Track.Thumb>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton Command="{x:Static ScrollBar.PageDownCommand}" Focusable="False">
+                                    <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template>
+                                </RepeatButton>
+                            </Track.IncreaseRepeatButton>
+                        </Track>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.4"/></Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style TargetType="Button">
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Foreground" Value="{StaticResource Ink}"/>
@@ -214,6 +261,35 @@
                     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="surface" Property="Background" Value="#FFF8E4"/></Trigger>
                     <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="surface" Property="BorderBrush" Value="{StaticResource Accent}"/></Trigger>
                     <Trigger Property="IsDropDownOpen" Value="True"><Setter TargetName="surface" Property="BorderBrush" Value="{StaticResource Accent}"/></Trigger>
+                    <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+        </Setter.Value></Setter>
+    </Style>
+
+    <Style x:Key="ProjectMultiSelectButton" TargetType="Button">
+        <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+        <Setter Property="Background" Value="{StaticResource InputSurface}"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="11,8,34,8"/>
+        <Setter Property="Margin" Value="0"/>
+        <Setter Property="MinHeight" Value="36"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Template"><Setter.Value>
+            <ControlTemplate TargetType="Button">
+                <Border x:Name="surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                    <Grid>
+                        <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Stretch"/>
+                        <Path Data="M 0,0 L 4,4 8,0" Stroke="{StaticResource Ink}" StrokeThickness="1.3"
+                              HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,-21,0" IsHitTestVisible="False"/>
+                    </Grid>
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="surface" Property="Background" Value="#FFF8E4"/></Trigger>
+                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="surface" Property="Background" Value="{StaticResource HoverSurface}"/></Trigger>
+                    <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="surface" Property="BorderBrush" Value="{StaticResource Accent}"/></Trigger>
                     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger>
                 </ControlTemplate.Triggers>
             </ControlTemplate>

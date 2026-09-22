@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -129,8 +128,11 @@ internal sealed class MainWindow : Window {
         footer.Children.Add(reloadButton);
         DockPanel.SetDock(footer, Dock.Bottom);
         root.Children.Add(footer);
-        root.Children.Add(new ScrollViewer { Content = groupPanel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Margin = new Thickness(0, 10, 0, 0) });
+        var todoScroller = new ScrollViewer { Content = groupPanel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Margin = new Thickness(0, 10, 0, 0) };
+        todoScroller.Resources[typeof(System.Windows.Controls.Primitives.ScrollBar)] =
+            Application.Current.FindResource("MinimalVerticalScrollBar");
+        root.Children.Add(todoScroller);
         frame.Children.Add(root);
         Content = frame;
 
@@ -225,13 +227,13 @@ internal sealed class MainWindow : Window {
             var heading = Theme.label(group.name, 16);
             heading.FontWeight = FontWeights.SemiBold;
             var expander = new Expander { Header = heading, IsExpanded = !settings.collapsedProjects.Contains(group.name),
-                Margin = new Thickness(0, 2, 0, 12), HorizontalContentAlignment = HorizontalAlignment.Stretch };
+                Margin = new Thickness(0, 1, 0, 3), HorizontalContentAlignment = HorizontalAlignment.Stretch };
             expander.Expanded += (_, _) => { settings.collapsedProjects.Remove(group.name); saveSettings(); };
             expander.Collapsed += (_, _) => {
                 if (!settings.collapsedProjects.Contains(group.name)) { settings.collapsedProjects.Add(group.name); }
                 saveSettings();
             };
-            var rows = new StackPanel { Margin = new Thickness(10, 8, 0, 0) };
+            var rows = new StackPanel { Margin = new Thickness(10, 3, 0, 0) };
             for (var index = 0; index < group.items.Count; index++) {
                 var itemIndex = index;
                 var item = group.items[index];
@@ -294,18 +296,29 @@ internal sealed class MainWindow : Window {
         var originalProject = project;
         var originalIndex = index;
         var content = project == null ? "" : baseline.document.groups.Single(group => group.name == project).items[index].content;
-        var selectedProject = project ?? settings.lastProject;
+        IReadOnlyList<string> selectedProjects = project == null
+            ? (settings.lastProjects.Count > 0 ? settings.lastProjects : [settings.lastProject])
+            : [project];
         if (project == null) {
-            try { if (!ProjectCatalog.discover(projectRoot).Contains(selectedProject)) { selectedProject = "其他"; } }
-            catch { selectedProject = "其他"; }
+            try {
+                var available = ProjectCatalog.discover(projectRoot);
+                selectedProjects = selectedProjects
+                    .Where(selected => available.Contains(selected, StringComparer.OrdinalIgnoreCase))
+                    .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                if (selectedProjects.Count == 0) { selectedProjects = ["其他"]; }
+            } catch { selectedProjects = ["其他"]; }
         }
-        editor = new EditorWindow(selectedProject, content, project != null, () => ProjectCatalog.discover(projectRoot),
-            (targetProject, text) => {
+        editor = new EditorWindow(selectedProjects, content, project != null, () => ProjectCatalog.discover(projectRoot),
+            (targetProjects, text) => {
                 var document = baseline.document.clone();
-                if (originalProject == null) { document.add(targetProject, text); }
-                else { document.edit(originalProject, originalIndex, targetProject, text); }
+                var isAdding = originalProject == null;
+                if (isAdding) { document.addToProjects(targetProjects, text); }
+                else { document.edit(originalProject!, originalIndex, targetProjects.Single(), text); }
                 snapshot = store.save(document, baseline.version);
-                settings.lastProject = targetProject;
+                if (isAdding) {
+                    settings.lastProjects = targetProjects.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                    settings.lastProject = settings.lastProjects[0];
+                }
                 hasDataError = false;
                 saveSettings();
                 showStatus("已儲存 " + DateTime.Now.ToString("HH:mm"));
@@ -343,10 +356,16 @@ internal sealed class MainWindow : Window {
             HorizontalOffset = -150 };
         var openFile = new MenuItem { Header = "開啟待辦資料檔" };
         openFile.Click += (_, _) => {
-            try { Process.Start(new ProcessStartInfo("notepad.exe") { ArgumentList = { store.filePath }, UseShellExecute = false }); }
-            catch (Exception exception) { showStatus(exception.Message, true); }
+            try { ShellFileLauncher.openDefault(store.filePath); }
+            catch (Exception exception) { showStatus("無法開啟資料檔：" + exception.Message, true); }
         };
         menu.Items.Add(openFile);
+        var chooseApplication = new MenuItem { Header = "選擇 App 開啟…" };
+        chooseApplication.Click += (_, _) => {
+            try { ShellFileLauncher.chooseApplication(this, store.filePath); }
+            catch (Exception exception) { showStatus("無法選擇 App：" + exception.Message, true); }
+        };
+        menu.Items.Add(chooseApplication);
         var refresh = new MenuItem { Header = "重新載入資料" };
         refresh.Click += (_, _) => loadData();
         menu.Items.Add(refresh);

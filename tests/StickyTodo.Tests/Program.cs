@@ -52,6 +52,17 @@ var tests = new List<(string name, Action action)> {
         check(text.Contains("1. [x] 甲\n2. [ ] 乙") && text.Contains("## 其他\n1. [ ]"), "編號或狀態錯誤");
         check(MarkdownCodec.parse(text).groups[0].items[0].isCompleted, "完成狀態遺失");
     }),
+    ("多專案新增建立獨立副本並排除重複選取", () => {
+        var document = new TodoDocument();
+        document.addToProjects(["SpotCam", "其他", "spotcam"], "同一段\n多行內容");
+        check(document.groups.Count == 2, "重複專案沒有合併");
+        check(document.groups.All(group => group.items.Single().content == "同一段\n多行內容"), "多專案內容不一致");
+        document.groups.Single(group => group.name == "SpotCam").items[0] = new TodoItem("已修改", true);
+        check(document.groups.Single(group => group.name == "其他").items[0] == new TodoItem("同一段\n多行內容"), "副本不是獨立項目");
+        var parsed = MarkdownCodec.parse(MarkdownCodec.serialize(document));
+        check(parsed.groups.Count == 2 && parsed.groups.All(group => group.items.Count == 1), "多專案 Markdown 往返失敗");
+        expect<ArgumentException>(() => document.addToProjects([], "內容"));
+    }),
     ("跨專案移動保留狀態並接續編號", () => {
         var document = new TodoDocument(); document.add("A", "甲"); document.add("B", "乙");
         document.groups[0].items[0] = new TodoItem("甲", true);
@@ -146,9 +157,18 @@ var tests = new List<(string name, Action action)> {
         var store = new SettingsStore(Path.Combine(root, "settings", "settings.json"));
         var initial = store.read(); check(!initial.isTopmost && !initial.hideCompleted && initial.lastProject == "其他", "預設不符");
         initial.width = 460; initial.height = 640; initial.left = -130; initial.top = 80;
-        initial.isTopmost = true; initial.hideCompleted = true; initial.lastProject = "SpotCam"; initial.collapsedProjects.Add("A");
+        initial.isTopmost = true; initial.hideCompleted = true; initial.lastProject = "SpotCam";
+        initial.lastProjects = ["SpotCam", "其他"]; initial.collapsedProjects.Add("A");
         store.save(initial); var loaded = store.read();
-        check(loaded.width == 460 && loaded.left == -130 && loaded.isTopmost && loaded.hideCompleted && loaded.lastProject == "SpotCam" && loaded.collapsedProjects.Contains("A"), "設定遺失");
+        check(loaded.width == 460 && loaded.left == -130 && loaded.isTopmost && loaded.hideCompleted
+            && loaded.lastProject == "SpotCam" && loaded.lastProjects.SequenceEqual(new[] { "SpotCam", "其他" })
+            && loaded.collapsedProjects.Contains("A"), "設定遺失");
+    }),
+    ("舊版單一專案設定自動轉成多選集合", () => {
+        var path = Path.Combine(root, "legacy-project.json");
+        File.WriteAllText(path, "{\"lastProject\":\"SpotCam\"}");
+        var loaded = new SettingsStore(path).read();
+        check(loaded.lastProjects.SequenceEqual(new[] { "SpotCam" }) && loaded.lastProject == "SpotCam", "舊設定未遷移");
     }),
     ("損壞設定可被偵測", () => {
         var path = Path.Combine(root, "badsettings.json"); File.WriteAllText(path, "{bad}");

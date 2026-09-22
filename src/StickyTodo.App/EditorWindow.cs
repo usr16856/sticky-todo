@@ -10,6 +10,8 @@ namespace StickyTodo;
 
 internal sealed class EditorWindow : Window {
     private readonly ComboBox projectSelector = new() { MinHeight = 32, Margin = new Thickness(0, 6, 0, 0) };
+    private readonly ProjectMultiSelector multiProjectSelector = new();
+    private readonly Grid projectSelectorHost = new();
     private readonly TextBox contentInput = new() {
         AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         Padding = new Thickness(10), MinHeight = 100
@@ -17,15 +19,17 @@ internal sealed class EditorWindow : Window {
     private readonly TextBlock errorLabel = new() { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.Firebrick };
     private readonly Button recoverButton = new() { Content = "保留草稿，重新載入並改為新增", Visibility = Visibility.Collapsed };
     private readonly Func<List<string>> getProjects;
-    private readonly Action<string, string> saveItem;
+    private readonly Action<IReadOnlyList<string>, string> saveItem;
     private readonly Action recoverAsNew;
     private readonly string? originalProject;
     private readonly string originalContent;
     private bool isSaved;
+    private bool isEditMode;
+    private readonly List<string> originalProjects;
     private readonly Button deleteButton = new() { Content = "刪除待辦", Foreground = Brushes.Firebrick };
 
-    internal EditorWindow(string project, string content, bool isEdit, Func<List<string>> getProjects,
-        Action<string, string> saveItem, Action recoverAsNew, Action? deleteItem = null) {
+    internal EditorWindow(IReadOnlyList<string> projects, string content, bool isEdit, Func<List<string>> getProjects,
+        Action<IReadOnlyList<string>, string> saveItem, Action recoverAsNew, Action? deleteItem = null) {
         this.getProjects = getProjects;
         this.saveItem = saveItem;
         this.recoverAsNew = recoverAsNew;
@@ -33,8 +37,10 @@ internal sealed class EditorWindow : Window {
         Foreground = Theme.ink;
         FontFamily = new FontFamily("Segoe UI, Microsoft JhengHei UI");
         FontSize = 14;
-        originalProject = project;
+        originalProjects = projects.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        originalProject = originalProjects.FirstOrDefault();
         originalContent = content;
+        isEditMode = isEdit;
         Title = isEdit ? "編輯待辦" : "新增待辦";
         Width = 410;
         Height = 540;
@@ -50,12 +56,14 @@ internal sealed class EditorWindow : Window {
         var header = new StackPanel();
         var projectRow = new DockPanel { Margin = new Thickness(0, 14, 0, 0) };
         var refreshButton = new Button { Content = "重新整理", ToolTip = "重新讀取專案資料夾" };
-        refreshButton.Click += (_, _) => refreshProjects(projectSelector.SelectedItem as string);
+        refreshButton.Click += (_, _) => refreshProjects(getSelectedProjects());
         DockPanel.SetDock(refreshButton, Dock.Right);
         projectRow.Children.Add(refreshButton);
         projectRow.Children.Add(Theme.label("專案"));
         header.Children.Add(projectRow);
-        header.Children.Add(projectSelector);
+        projectSelectorHost.Children.Add(projectSelector);
+        projectSelectorHost.Children.Add(multiProjectSelector);
+        header.Children.Add(projectSelectorHost);
         var contentLabel = Theme.label("待辦內容");
         contentLabel.Margin = new Thickness(0, 16, 0, 8);
         header.Children.Add(contentLabel);
@@ -68,8 +76,12 @@ internal sealed class EditorWindow : Window {
         footer.Children.Add(recoverButton);
         recoverButton.Click += (_, _) => {
             try {
+                var recoveredProjects = getSelectedProjects();
                 recoverAsNew();
                 deleteButton.Visibility = Visibility.Collapsed;
+                isEditMode = false;
+                multiProjectSelector.setSelectedProjects(recoveredProjects);
+                updateSelectorMode();
                 Title = "新增待辦（保留的草稿）";
                 errorLabel.Text = "已載入最新資料；按儲存將草稿新增為一筆待辦，原項目不變。";
                 recoverButton.Visibility = Visibility.Collapsed;
@@ -107,12 +119,11 @@ internal sealed class EditorWindow : Window {
         root.Children.Add(contentInput);
         frame.Children.Add(root);
         Content = frame;
-        refreshProjects(project);
+        refreshProjects(originalProjects);
         Loaded += (_, _) => { contentInput.Focus(); contentInput.CaretIndex = contentInput.Text.Length; };
         Closing += (_, eventArgs) => {
-            if (!isSaved && (contentInput.Text != originalContent || projectSelector.SelectedItem as string != originalProject)) {
-                eventArgs.Cancel = MessageBox.Show(this, "尚未儲存的內容將放棄。確定關閉？", "保留草稿",
-                    MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes;
+            if (!isSaved && (contentInput.Text != originalContent || !sameProjects(getSelectedProjects(), originalProjects))) {
+                eventArgs.Cancel = new DiscardDraftConfirmationWindow(this).ShowDialog() != true;
             }
         };
     }
@@ -123,24 +134,33 @@ internal sealed class EditorWindow : Window {
         recoverButton.Visibility = Visibility.Visible;
     }
 
-    private void refreshProjects(string? selected) {
+    private void refreshProjects(IEnumerable<string> selectedProjects) {
         try {
             var projects = getProjects();
-            if (originalProject != null && !projects.Contains(originalProject)) {
+            if (originalProject != null && !projects.Contains(originalProject, StringComparer.OrdinalIgnoreCase)) {
                 projects.Insert(0, originalProject);
             }
             projectSelector.ItemsSource = projects;
-            projectSelector.SelectedItem = selected != null && projects.Contains(selected) ? selected : "其他";
+            var selected = selectedProjects.Where(project => projects.Contains(project, StringComparer.OrdinalIgnoreCase)).ToList();
+            if (selected.Count == 0) { selected.Add("其他"); }
+            projectSelector.SelectedItem = projects.FirstOrDefault(project => project.Equals(selected[0], StringComparison.OrdinalIgnoreCase)) ?? "其他";
+            multiProjectSelector.setProjects(projects, selected);
+            updateSelectorMode();
         } catch (Exception exception) {
             errorLabel.Text = "無法讀取專案清單：" + exception.Message;
-            projectSelector.ItemsSource = new[] { originalProject ?? "其他", "其他" }.Distinct().ToList();
+            var projects = new[] { originalProject ?? "其他", "其他" }.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            projectSelector.ItemsSource = projects;
             projectSelector.SelectedIndex = 0;
+            multiProjectSelector.setProjects(projects, selectedProjects);
+            updateSelectorMode();
         }
     }
 
     private void save() {
         try {
-            saveItem(projectSelector.SelectedItem as string ?? "其他", contentInput.Text);
+            var projects = getSelectedProjects();
+            if (projects.Count == 0) { throw new ArgumentException("請至少選擇一個專案。"); }
+            saveItem(projects, contentInput.Text);
             isSaved = true;
             DialogResult = true;
         } catch (DataConflictException) {
@@ -148,5 +168,19 @@ internal sealed class EditorWindow : Window {
         } catch (Exception exception) {
             errorLabel.Text = "未儲存，內容仍保留：" + exception.Message;
         }
+    }
+
+    private IReadOnlyList<string> getSelectedProjects() {
+        if (!isEditMode) { return multiProjectSelector.selectedProjects; }
+        return projectSelector.SelectedItem is string project ? [project] : [];
+    }
+
+    private void updateSelectorMode() {
+        projectSelector.Visibility = isEditMode ? Visibility.Visible : Visibility.Collapsed;
+        multiProjectSelector.Visibility = isEditMode ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private static bool sameProjects(IReadOnlyList<string> first, IReadOnlyList<string> second) {
+        return first.Count == second.Count && first.SequenceEqual(second, StringComparer.OrdinalIgnoreCase);
     }
 }

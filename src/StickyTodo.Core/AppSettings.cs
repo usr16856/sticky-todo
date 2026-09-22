@@ -11,6 +11,7 @@ public sealed class AppSettings {
     public bool hideCompleted { get; set; }
     public double windowOpacity { get; set; } = 1.0;
     public string lastProject { get; set; } = "其他";
+    public List<string> lastProjects { get; set; } = [];
     public List<string> collapsedProjects { get; set; } = [];
 }
 
@@ -26,10 +27,17 @@ public sealed class SettingsStore(string filePath) {
         if (!double.IsFinite(settings.windowOpacity) || !double.IsFinite(settings.width) || !double.IsFinite(settings.height)
             || (settings.left.HasValue && !double.IsFinite(settings.left.Value))
             || (settings.top.HasValue && !double.IsFinite(settings.top.Value))
-            || settings.collapsedProjects == null || settings.lastProject == null) {
+            || settings.collapsedProjects == null || settings.lastProject == null || settings.lastProjects == null) {
             throw new FormatException("設定檔內容無效。");
         }
         settings.windowOpacity = Math.Clamp(settings.windowOpacity, 0.4, 1.0);
+        settings.lastProjects = settings.lastProjects
+            .Where(project => !string.IsNullOrWhiteSpace(project) && !project.Contains('\n') && !project.Contains('\r'))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (settings.lastProjects.Count == 0) {
+            settings.lastProjects.Add(string.IsNullOrWhiteSpace(settings.lastProject) ? "其他" : settings.lastProject);
+        }
+        settings.lastProject = settings.lastProjects[0];
         return settings;
     }
 
