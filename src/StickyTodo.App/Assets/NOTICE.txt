@@ -1,0 +1,5 @@
+StickyTodo icon is adapted from Lucide sticky-note.
+Source: https://github.com/lucide-icons/lucide/blob/b0b1a4f8abcb46833d2f6f89952602ddd39c889a/icons/sticky-note.svg
+License: ISC; see Lucide-LICENSE.txt.
+Changes: warm yellow paper fill, light folded corner, olive brown outlines.
+Regenerate the multi-resolution ICO with scripts/Generate-Icon.ps1 using PowerShell 7 in STA mode.

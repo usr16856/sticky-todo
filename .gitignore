@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+artifacts/
+TODO.md
+TODO.md.*
+*.tmp
+.vs/
+.codebase-memory/
