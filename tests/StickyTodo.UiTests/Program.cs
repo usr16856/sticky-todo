@@ -15,6 +15,12 @@ internal static class Program {
         try {
             var application = new Application();
             Theme.install(application);
+            var tooltip = new ToolTip { Content = "不透明度：66%" };
+            tooltip.ApplyTemplate();
+            var tooltipSurface = (Border)tooltip.Template.FindName("surface", tooltip);
+            check(((SolidColorBrush)tooltipSurface.Background).Color == Color.FromRgb(255, 249, 218), "Tooltip background does not match paper");
+            check(((SolidColorBrush)tooltipSurface.BorderBrush).Color == Color.FromRgb(110, 86, 36), "Tooltip border does not match accent");
+            check(tooltipSurface.CornerRadius == new CornerRadius(6) && tooltipSurface.Padding == new Thickness(8, 5, 8, 5), "Tooltip shape or padding incorrect");
             var projectName = "這是一個很長的專案名稱用來驗證選單換行與窄視窗";
             var saved = false;
             var editor = new EditorWindow("其他", "", false, () => ["SpotCam", projectName, "其他"],
