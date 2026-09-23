@@ -30,7 +30,7 @@ public sealed class SettingsStore(string filePath) {
             || settings.collapsedProjects == null || settings.lastProject == null || settings.lastProjects == null) {
             throw new FormatException("設定檔內容無效。");
         }
-        settings.windowOpacity = Math.Clamp(settings.windowOpacity, 0.4, 1.0);
+        settings.windowOpacity = Math.Clamp(settings.windowOpacity, 0.1, 1.0);
         settings.lastProjects = settings.lastProjects
             .Where(project => !string.IsNullOrWhiteSpace(project) && !project.Contains('\n') && !project.Contains('\r'))
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();

@@ -32,7 +32,9 @@ var tests = new List<(string name, Action action)> {
         var path = Path.Combine(root, "opacity-range.json");
         var store = new SettingsStore(path);
         File.WriteAllText(path, "{\"windowOpacity\":0}");
-        check(store.read().windowOpacity == 0.4, "下限錯誤");
+        check(store.read().windowOpacity == 0.1, "下限錯誤");
+        File.WriteAllText(path, "{\"windowOpacity\":0.1}");
+        check(store.read().windowOpacity == 0.1, "10% 透明度沒有保留");
         File.WriteAllText(path, "{\"windowOpacity\":2}");
         check(store.read().windowOpacity == 1.0, "上限錯誤");
     }),

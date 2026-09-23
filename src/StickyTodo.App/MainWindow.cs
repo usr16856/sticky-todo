@@ -33,7 +33,7 @@ internal sealed class MainWindow : Window {
     private readonly DispatcherTimer pollTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer settingsTimer = new() { Interval = TimeSpan.FromMilliseconds(700) };
     private readonly Forms.NotifyIcon trayIcon;
-    private readonly Slider opacitySlider = new() { Minimum = 40, Maximum = 100, SmallChange = 1, LargeChange = 10,
+    private readonly Slider opacitySlider = new() { Minimum = 10, Maximum = 100, SmallChange = 1, LargeChange = 10,
         TickFrequency = 1, IsSnapToTickEnabled = true, Width = 100, Height = 24, VerticalAlignment = VerticalAlignment.Top };
     private double appliedOpacity = 1.0;
     private bool isApplyingOpacity;
