@@ -15,13 +15,14 @@
 
 ## 位置
 
-- 原始碼：`C:\Users\bench\git\StickyTodo`
-- 資料：`C:\Users\bench\git\StickyTodo\TODO.md`
-- 上一版資料：資料檔旁的 `TODO.md.bak`
+- 原始碼：`.`（目前儲存庫）
+- 資料：`.\TODO.md`
+- 上一版資料：`.\TODO.md.bak`
+- 專案選單來源：`..`
 - 程式：`%LOCALAPPDATA%\Programs\StickyTodo\StickyTodo.exe`
 - 設定：`%LOCALAPPDATA%\StickyTodo\settings.json`
 
-專案選單使用 `C:\Users\bench\git` 第一層非隱藏、非系統資料夾，排除以點開頭的資料夾及 `docs`、`artifacts`、`node_modules`、`bin`、`obj`。不要求 `.git`，`其他` 固定放最後；已有的歷史分組不因資料夾消失而刪除。新增視窗會記住上次勾選的專案組合；舊版設定的單一專案會自動沿用。
+正式執行時，專案選單來源預設為 `%USERPROFILE%\git`，資料預設為其下的 `StickyTodo\TODO.md`；上述相對路徑則以目前儲存庫為基準。專案選單讀取來源目錄的第一層非隱藏、非系統資料夾，排除以點開頭的資料夾及 `docs`、`artifacts`、`node_modules`、`bin`、`obj`。不要求 `.git`，`其他` 固定放最後；已有的歷史分組不因資料夾消失而刪除。新增視窗會記住上次勾選的專案組合；舊版設定的單一專案會自動沿用。
 
 ## 資料格式與保護
 

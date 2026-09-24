@@ -15,6 +15,27 @@ internal static class Program {
         try {
             var application = new Application();
             Theme.install(application);
+            var userRoot = Path.Combine(Path.GetTempPath(), "StickyTodoUser");
+            var localRoot = Path.Combine(Path.GetTempPath(), "StickyTodoLocal");
+            var defaultPaths = AppPaths.resolve([], userRoot, localRoot);
+            check(defaultPaths.projectRoot == Path.GetFullPath(Path.Combine(userRoot, "git")), "Default project root is not user-relative");
+            check(defaultPaths.dataDirectory == Path.GetFullPath(Path.Combine(userRoot, "git", "StickyTodo")), "Default data directory is not project-relative");
+            check(defaultPaths.settingsDirectory == Path.GetFullPath(Path.Combine(localRoot, "StickyTodo")) && !defaultPaths.isTestInstance,
+                "Default settings path or production mode is incorrect");
+            var overriddenPaths = AppPaths.resolve([
+                "--project-root", Path.Combine(userRoot, "projects"),
+                "--data-dir", Path.Combine(userRoot, "data"),
+                "--settings-dir", Path.Combine(localRoot, "settings")
+            ], userRoot, localRoot);
+            check(overriddenPaths.projectRoot == Path.GetFullPath(Path.Combine(userRoot, "projects"))
+                && overriddenPaths.dataDirectory == Path.GetFullPath(Path.Combine(userRoot, "data"))
+                && overriddenPaths.settingsDirectory == Path.GetFullPath(Path.Combine(localRoot, "settings"))
+                && overriddenPaths.isTestInstance, "Command-line path overrides were not preserved");
+            var projectOverridePaths = AppPaths.resolve([
+                "--project-root", Path.Combine(userRoot, "other-projects")
+            ], userRoot, localRoot);
+            check(projectOverridePaths.dataDirectory == Path.GetFullPath(Path.Combine(userRoot, "other-projects", "StickyTodo")),
+                "Data directory does not follow an overridden project root");
             var tooltip = new ToolTip { Content = "不透明度：66%" };
             tooltip.ApplyTemplate();
             var tooltipSurface = (Border)tooltip.Template.FindName("surface", tooltip);
@@ -111,7 +132,7 @@ internal static class Program {
             discardBitmap.Render(discardRoot);
             var discardEncoder = new PngBitmapEncoder(); discardEncoder.Frames.Add(BitmapFrame.Create(discardBitmap));
             using (var stream = File.Create(discardOutput)) { discardEncoder.Save(stream); }
-            Console.WriteLine("PASS Styled draft confirmation, Windows file association, themed scrollbar, editor template loading, multi-project selection/save, single-project edit, multiline content, title binding, minimum-size conflict layout");
+            Console.WriteLine("PASS Portable path resolution, styled draft confirmation, Windows file association, themed scrollbar, editor template loading, multi-project selection/save, single-project edit, multiline content, title binding, minimum-size conflict layout");
             Console.WriteLine(output);
             Console.WriteLine(discardOutput);
             return 0;
