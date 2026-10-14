@@ -13,7 +13,7 @@ internal static class Program {
     [STAThread]
     private static int Main() {
         try {
-            var application = new Application();
+            var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
             Theme.install(application);
             var userRoot = Path.Combine(Path.GetTempPath(), "StickyTodoUser");
             var localRoot = Path.Combine(Path.GetTempPath(), "StickyTodoLocal");
@@ -54,6 +54,31 @@ internal static class Program {
                 "Minimal scrollbar dimensions or rounded thumb incorrect");
             check(((SolidColorBrush)scrollThumb.Background).Color == Color.FromRgb(110, 86, 36),
                 "Minimal scrollbar does not use the accent color");
+            var themedLabel = Theme.label("主題");
+            var probeWindow = new Window { Content = themedLabel };
+            Theme.apply("#2B2D33");
+            var darkPalette = StickyTodo.Core.ThemePalette.from("#2B2D33");
+            check(Theme.currentColor == "#2B2D33", "Theme color was not recorded");
+            check(((SolidColorBrush)themedLabel.Foreground).Color == Theme.toColor(darkPalette.ink),
+                "Label in an open window did not follow the new theme");
+            var darkTooltip = new ToolTip { Content = "主題" };
+            darkTooltip.ApplyTemplate();
+            var darkTooltipSurface = (Border)darkTooltip.Template.FindName("surface", darkTooltip);
+            check(((SolidColorBrush)darkTooltipSurface.Background).Color == Theme.toColor(darkPalette.paper)
+                && ((SolidColorBrush)darkTooltip.Foreground).Color == Theme.toColor(darkPalette.ink), "New tooltip does not use the theme");
+            Theme.apply("not-a-color");
+            check(Theme.currentColor == StickyTodo.Core.ThemePalette.DEFAULT_COLOR
+                && ((SolidColorBrush)themedLabel.Foreground).Color == Color.FromRgb(56, 49, 34), "Invalid theme did not restore default");
+            probeWindow.Close();
+            var themeMenu = new MenuItem { Header = "主題色" };
+            themeMenu.Items.Add(new MenuItem { Header = "便條黃", IsChecked = true });
+            var contextMenu = new ContextMenu();
+            contextMenu.Items.Add(themeMenu);
+            contextMenu.Measure(new Size(300, 300)); contextMenu.Arrange(new Rect(0, 0, 300, 300));
+            themeMenu.ApplyTemplate();
+            check(themeMenu.Role == MenuItemRole.SubmenuHeader
+                && themeMenu.Template.FindName("PART_Popup", themeMenu) is System.Windows.Controls.Primitives.Popup,
+                "Theme submenu has no popup");
             var launchFile = Path.Combine(AppContext.BaseDirectory, "open-with-test.md");
             File.WriteAllText(launchFile, "# test");
             var launchInfo = ShellFileLauncher.createDefaultStartInfo(launchFile);
@@ -132,14 +157,71 @@ internal static class Program {
             discardBitmap.Render(discardRoot);
             var discardEncoder = new PngBitmapEncoder(); discardEncoder.Frames.Add(BitmapFrame.Create(discardBitmap));
             using (var stream = File.Create(discardOutput)) { discardEncoder.Save(stream); }
-            Console.WriteLine("PASS Portable path resolution, styled draft confirmation, Windows file association, themed scrollbar, editor template loading, multi-project selection/save, single-project edit, multiline content, title binding, minimum-size conflict layout");
+            var pickerOutput = testThemeColorWindow();
+            Console.WriteLine("PASS Portable path resolution, styled draft confirmation, Windows file association, themed scrollbar, editor template loading, multi-project selection/save, single-project edit, multiline content, title binding, minimum-size conflict layout, theme color picker");
             Console.WriteLine(output);
             Console.WriteLine(discardOutput);
+            Console.WriteLine(pickerOutput);
             return 0;
         } catch (Exception exception) {
             Console.WriteLine(exception);
             return 1;
         }
+    }
+
+    private static string testThemeColorWindow() {
+        const string defaultColor = StickyTodo.Core.ThemePalette.DEFAULT_COLOR;
+        var owner = new Window();
+        Theme.apply(defaultColor);
+
+        var empty = new ThemeColorWindow(owner, Theme.currentColor, []);
+        var emptyRoot = (FrameworkElement)empty.Content;
+        emptyRoot.Measure(new Size(400, double.PositiveInfinity)); emptyRoot.Arrange(new Rect(emptyRoot.DesiredSize)); emptyRoot.UpdateLayout();
+        check(!empty.isRecentVisible && empty.currentColor == defaultColor, "Picker initial state or empty recent row incorrect");
+        var applyButton = descendants(emptyRoot).OfType<Button>().Single(button => button.Content as string == "套用");
+        check(descendants(emptyRoot).OfType<RadioButton>().Count() == StickyTodo.Core.ThemePalette.suggestions.Count,
+            "Suggested swatches missing");
+        check(descendants(emptyRoot).OfType<RadioButton>().Single(swatch => swatch.IsChecked == true).ToolTip as string == defaultColor,
+            "Current color swatch is not selected");
+        empty.setHex("#12");
+        check(!applyButton.IsEnabled, "Invalid hex did not disable apply");
+        empty.setHex("abc");
+        check(applyButton.IsEnabled && empty.currentColor == "#AABBCC", "Shorthand hex not accepted");
+        empty.selectColor("#F3E1F7");
+        emptyRoot.UpdateLayout();
+        var pickerOutput = Path.Combine(AppContext.BaseDirectory, "theme-color-picker.png");
+        var size = emptyRoot.DesiredSize;
+        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(size.Width), (int)Math.Ceiling(size.Height), 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(emptyRoot);
+        var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using (var stream = File.Create(pickerOutput)) { encoder.Save(stream); }
+        empty.Close();
+
+        var cancelled = new ThemeColorWindow(owner, Theme.currentColor, ["#123456", "bad"]);
+        check(cancelled.isRecentVisible, "Recent row hidden despite saved colors");
+        string? previewed = null;
+        cancelled.Loaded += (_, _) => {
+            cancelled.selectColor("#2B2D33");
+            cancelled.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, () => {
+                previewed = Theme.currentColor;
+                cancelled.Close();
+            });
+        };
+        check(cancelled.ShowDialog() != true && cancelled.selectedColor == null, "Closing picker reported a selection");
+        check(previewed == "#2B2D33", "Picker did not preview live: " + previewed);
+        check(Theme.currentColor == defaultColor, "Closing picker did not restore the original theme");
+
+        var applied = new ThemeColorWindow(owner, Theme.currentColor, []);
+        applied.Loaded += (_, _) => applied.Dispatcher.BeginInvoke(() => {
+            applied.setHex("#12");
+            applied.apply();
+            applied.setHex("1e3c5a");
+            applied.apply();
+        });
+        check(applied.ShowDialog() == true && applied.selectedColor == "#1E3C5A", "Picker did not return the applied color");
+        Theme.apply(defaultColor);
+        owner.Close();
+        return pickerOutput;
     }
 
     private static IEnumerable<DependencyObject> descendants(DependencyObject parent) {

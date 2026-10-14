@@ -48,8 +48,7 @@ internal sealed class MainWindow : Window {
         this.projectRoot = projectRoot;
         this.isTestInstance = isTestInstance;
         this.activationEvent = activationEvent;
-        Background = Theme.paper;
-        Foreground = Theme.ink;
+        Theme.usePaper(this);
         FontFamily = new FontFamily("Segoe UI, Microsoft JhengHei UI");
         FontSize = 14;
         addButton.SetResourceReference(StyleProperty, "PrimaryButton");
@@ -62,6 +61,7 @@ internal sealed class MainWindow : Window {
             settings = new AppSettings();
             settingsWarning = "設定無法讀取，已使用預設值：" + exception.Message;
         }
+        Theme.apply(settings.themeColor);
         Title = isTestInstance ? "StickyTodo · 測試便條紙" : "StickyTodo · 我的待辦";
         var iconUri = new Uri("pack://application:,,,/StickyTodo;component/Assets/StickyTodo.ico");
         Icon = System.Windows.Media.Imaging.BitmapFrame.Create(iconUri);
@@ -76,14 +76,15 @@ internal sealed class MainWindow : Window {
         } else {
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
         }
-        var frame = new DockPanel { Background = Theme.paper };
+        var frame = new DockPanel();
+        frame.SetResourceReference(Panel.BackgroundProperty, Theme.PAPER);
         var caption = new WindowHeader(this);
         AllowsTransparency = true;
         DockPanel.SetDock(caption, Dock.Top);
         frame.Children.Add(caption);
         var root = new DockPanel { Margin = new Thickness(16, 0, 16, 12) };
         var header = new StackPanel();
-        summary.Foreground = Theme.muted;
+        summary.SetResourceReference(TextBlock.ForegroundProperty, Theme.MUTED);
         summary.Margin = new Thickness(0, 4, 0, 10);
         header.Children.Add(summary);
         var toolbar = new DockPanel();
@@ -162,7 +163,8 @@ internal sealed class MainWindow : Window {
         SourceInitialized += (_, _) => applyOpacity();
     }
 
-    private readonly ToolTip opacityHint = new() { Placement = System.Windows.Controls.Primitives.PlacementMode.Top };
+    // Detached from any window tree, so it is recreated on theme change to pick up the new brushes.
+    private ToolTip opacityHint = new() { Placement = System.Windows.Controls.Primitives.PlacementMode.Top };
 
     private void applyOpacity() {
         if (isApplyingOpacity) { return; }
@@ -217,7 +219,7 @@ internal sealed class MainWindow : Window {
             empty.Children.Add(emptyTitle);
             var hint = Theme.label("按「新增待辦」選擇專案，\n記下下一個想做的功能。", 13);
             hint.TextAlignment = TextAlignment.Center;
-            hint.Foreground = Theme.muted;
+            hint.SetResourceReference(TextBlock.ForegroundProperty, Theme.MUTED);
             hint.Margin = new Thickness(0, 12, 0, 0);
             empty.Children.Add(hint);
             groupPanel.Children.Add(empty);
@@ -252,7 +254,10 @@ internal sealed class MainWindow : Window {
                 text.LineHeight = 22;
                 text.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;
                 text.Margin = new Thickness(0, 6, 4, 6);
-                if (item.isCompleted) { text.TextDecorations = TextDecorations.Strikethrough; text.Foreground = Theme.muted; }
+                if (item.isCompleted) {
+                    text.TextDecorations = TextDecorations.Strikethrough;
+                    text.SetResourceReference(TextBlock.ForegroundProperty, Theme.MUTED);
+                }
                 Grid.SetColumn(text, 1);
                 row.Children.Add(text);
                 var editLabel = Theme.label("編輯", text.FontSize);
@@ -382,6 +387,7 @@ internal sealed class MainWindow : Window {
             } catch (Exception exception) { showStatus("開機啟動設定失敗：" + exception.Message, true); }
         };
         menu.Items.Add(startup);
+        menu.Items.Add(createThemeMenu());
         menu.Items.Add(new Separator());
         var quit = new MenuItem { Header = "結束 StickyTodo" };
         quit.Click += (_, _) => exit();
@@ -390,9 +396,56 @@ internal sealed class MainWindow : Window {
         menu.IsOpen = true;
     }
 
+    private MenuItem createThemeMenu() {
+        var themeMenu = new MenuItem { Header = "主題色" };
+        var isPreset = false;
+        foreach (var preset in ThemePalette.presets) {
+            var item = new MenuItem { Header = createSwatchHeader(preset.name, preset.color),
+                IsChecked = preset.color == Theme.currentColor };
+            System.Windows.Automation.AutomationProperties.SetName(item, "主題色：" + preset.name);
+            isPreset |= item.IsChecked;
+            item.Click += (_, _) => setThemeColor(preset.color);
+            themeMenu.Items.Add(item);
+        }
+        themeMenu.Items.Add(new Separator());
+        var custom = new MenuItem { IsChecked = !isPreset,
+            Header = isPreset ? "自訂顏色…" : createSwatchHeader($"自訂顏色（{Theme.currentColor}）…", Theme.currentColor) };
+        System.Windows.Automation.AutomationProperties.SetName(custom, "自訂主題色");
+        custom.Click += (_, _) => chooseCustomThemeColor();
+        themeMenu.Items.Add(custom);
+        return themeMenu;
+    }
+
+    private static StackPanel createSwatchHeader(string name, string color) {
+        ThemeColor.tryParse(color, out var parsed);
+        var swatch = new Border { Width = 14, Height = 14, CornerRadius = new CornerRadius(3), BorderThickness = new Thickness(1),
+            Background = new SolidColorBrush(Theme.toColor(parsed)), Margin = new Thickness(0, 0, 8, 0),
+            VerticalAlignment = VerticalAlignment.Center };
+        swatch.SetResourceReference(Border.BorderBrushProperty, "ControlBorder");
+        var header = new StackPanel { Orientation = Orientation.Horizontal };
+        header.Children.Add(swatch);
+        header.Children.Add(new TextBlock { Text = name, VerticalAlignment = VerticalAlignment.Center });
+        return header;
+    }
+
+    private void chooseCustomThemeColor() {
+        var picker = new ThemeColorWindow(this, Theme.currentColor, settings.recentThemeColors);
+        if (picker.ShowDialog() != true || picker.selectedColor == null) { return; }
+        settings.recentThemeColors = ThemePalette.addRecent(settings.recentThemeColors, picker.selectedColor);
+        setThemeColor(picker.selectedColor);
+    }
+
+    private void setThemeColor(string color) {
+        Theme.apply(color);
+        opacityHint.IsOpen = false;
+        opacityHint = new ToolTip { Placement = opacityHint.Placement, Content = opacitySlider.ToolTip };
+        settings.themeColor = Theme.currentColor;
+        saveSettings();
+    }
+
     private void showStatus(string message, bool isError = false) {
         status.Text = message;
-        status.Foreground = isError ? Brushes.Firebrick : Theme.muted;
+        status.SetResourceReference(TextBlock.ForegroundProperty, isError ? Theme.ERROR : Theme.MUTED);
     }
 
     private void scheduleSettings() {

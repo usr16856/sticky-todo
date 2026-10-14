@@ -18,13 +18,13 @@ internal sealed class DiscardDraftConfirmationWindow : Window {
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
         }
         ShowInTaskbar = false;
-        Background = Theme.paper;
-        Foreground = Theme.ink;
+        Theme.usePaper(this);
         FontFamily = owner.FontFamily;
         FontSize = 14;
         Opacity = 1;
 
-        var frame = new DockPanel { Background = Theme.paper };
+        var frame = new DockPanel();
+        frame.SetResourceReference(Panel.BackgroundProperty, Theme.PAPER);
         var caption = new WindowHeader(this, caption: null, showWindowControls: false);
         DockPanel.SetDock(caption, Dock.Top);
         frame.Children.Add(caption);
@@ -49,7 +49,7 @@ internal sealed class DiscardDraftConfirmationWindow : Window {
         question.FontWeight = FontWeights.SemiBold;
         text.Children.Add(question);
         var hint = Theme.label("關閉後，這次修改將無法復原。", 13);
-        hint.Foreground = Theme.muted;
+        hint.SetResourceReference(TextBlock.ForegroundProperty, Theme.MUTED);
         hint.Margin = new Thickness(0, 12, 0, 0);
         text.Children.Add(hint);
         body.Children.Add(text);

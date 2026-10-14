@@ -13,6 +13,8 @@ public sealed class AppSettings {
     public string lastProject { get; set; } = "其他";
     public List<string> lastProjects { get; set; } = [];
     public List<string> collapsedProjects { get; set; } = [];
+    public string themeColor { get; set; } = ThemePalette.DEFAULT_COLOR;
+    public List<string> recentThemeColors { get; set; } = [];
 }
 
 public sealed class SettingsStore(string filePath) {
@@ -31,6 +33,8 @@ public sealed class SettingsStore(string filePath) {
             throw new FormatException("設定檔內容無效。");
         }
         settings.windowOpacity = Math.Clamp(settings.windowOpacity, 0.1, 1.0);
+        settings.themeColor = ThemePalette.normalize(settings.themeColor);
+        settings.recentThemeColors = ThemePalette.normalizeRecent(settings.recentThemeColors);
         settings.lastProjects = settings.lastProjects
             .Where(project => !string.IsNullOrWhiteSpace(project) && !project.Contains('\n') && !project.Contains('\r'))
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();

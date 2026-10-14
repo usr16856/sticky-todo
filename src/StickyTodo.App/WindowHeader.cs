@@ -22,7 +22,7 @@ internal sealed class WindowHeader : Grid {
     internal WindowHeader(Window window, string? caption = "我的待辦", bool showWindowControls = true) {
         this.window = window;
         Height = 48;
-        Background = Theme.paper;
+        SetResourceReference(BackgroundProperty, Theme.PAPER);
         window.WindowStyle = WindowStyle.None;
         window.ResizeMode = ResizeMode.CanResize;
         WindowChrome.SetWindowChrome(window, new WindowChrome {
@@ -84,7 +84,7 @@ internal sealed class WindowHeader : Grid {
     private static Style createButtonStyle(bool isClose) {
         var style = new Style(typeof(Button));
         style.Setters.Add(new Setter(Control.BackgroundProperty, Brushes.Transparent));
-        style.Setters.Add(new Setter(Control.ForegroundProperty, Theme.ink));
+        style.Setters.Add(new Setter(Control.ForegroundProperty, new DynamicResourceExtension(Theme.INK)));
         style.Setters.Add(new Setter(Control.BorderBrushProperty, Brushes.Transparent));
         style.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(1)));
         style.Setters.Add(new Setter(FrameworkElement.MarginProperty, new Thickness(0)));
@@ -100,14 +100,16 @@ internal sealed class WindowHeader : Grid {
         border.AppendChild(presenter);
         style.Setters.Add(new Setter(Control.TemplateProperty, new ControlTemplate(typeof(Button)) { VisualTree = border }));
         var hover = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
-        hover.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(isClose ? Color.FromRgb(196, 43, 28) : Color.FromArgb(22, 56, 49, 34))));
+        hover.Setters.Add(new Setter(Control.BackgroundProperty, isClose
+            ? new SolidColorBrush(Color.FromRgb(196, 43, 28)) : new DynamicResourceExtension(Theme.CAPTION_HOVER)));
         if (isClose) { hover.Setters.Add(new Setter(Control.ForegroundProperty, Brushes.White)); }
         style.Triggers.Add(hover);
         var pressed = new Trigger { Property = System.Windows.Controls.Primitives.ButtonBase.IsPressedProperty, Value = true };
-        pressed.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(isClose ? Color.FromRgb(155, 30, 20) : Color.FromArgb(42, 56, 49, 34))));
+        pressed.Setters.Add(new Setter(Control.BackgroundProperty, isClose
+            ? new SolidColorBrush(Color.FromRgb(155, 30, 20)) : new DynamicResourceExtension(Theme.CAPTION_PRESSED)));
         style.Triggers.Add(pressed);
         var focused = new Trigger { Property = UIElement.IsKeyboardFocusedProperty, Value = true };
-        focused.Setters.Add(new Setter(Control.BorderBrushProperty, Theme.accent));
+        focused.Setters.Add(new Setter(Control.BorderBrushProperty, new DynamicResourceExtension(Theme.ACCENT)));
         style.Triggers.Add(focused);
         return style;
     }

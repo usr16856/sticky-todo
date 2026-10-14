@@ -16,7 +16,7 @@ internal sealed class EditorWindow : Window {
         AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         Padding = new Thickness(10), MinHeight = 100
     };
-    private readonly TextBlock errorLabel = new() { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.Firebrick };
+    private readonly TextBlock errorLabel = new() { TextWrapping = TextWrapping.Wrap };
     private readonly Button recoverButton = new() { Content = "保留草稿，重新載入並改為新增", Visibility = Visibility.Collapsed };
     private readonly Func<List<string>> getProjects;
     private readonly Action<IReadOnlyList<string>, string> saveItem;
@@ -26,15 +26,16 @@ internal sealed class EditorWindow : Window {
     private bool isSaved;
     private bool isEditMode;
     private readonly List<string> originalProjects;
-    private readonly Button deleteButton = new() { Content = "刪除待辦", Foreground = Brushes.Firebrick };
+    private readonly Button deleteButton = new() { Content = "刪除待辦" };
 
     internal EditorWindow(IReadOnlyList<string> projects, string content, bool isEdit, Func<List<string>> getProjects,
         Action<IReadOnlyList<string>, string> saveItem, Action recoverAsNew, Action? deleteItem = null) {
         this.getProjects = getProjects;
         this.saveItem = saveItem;
         this.recoverAsNew = recoverAsNew;
-        Background = Theme.paper;
-        Foreground = Theme.ink;
+        Theme.usePaper(this);
+        errorLabel.SetResourceReference(TextBlock.ForegroundProperty, Theme.ERROR);
+        deleteButton.SetResourceReference(ForegroundProperty, Theme.ERROR);
         FontFamily = new FontFamily("Segoe UI, Microsoft JhengHei UI");
         FontSize = 14;
         originalProjects = projects.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -48,7 +49,8 @@ internal sealed class EditorWindow : Window {
         MinHeight = 520;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ShowInTaskbar = false;
-        var frame = new DockPanel { Background = Theme.paper };
+        var frame = new DockPanel();
+        frame.SetResourceReference(Panel.BackgroundProperty, Theme.PAPER);
         var caption = new WindowHeader(this, caption: null, showWindowControls: false);
         DockPanel.SetDock(caption, Dock.Top);
         frame.Children.Add(caption);

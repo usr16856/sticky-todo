@@ -38,6 +38,70 @@ var tests = new List<(string name, Action action)> {
         File.WriteAllText(path, "{\"windowOpacity\":2}");
         check(store.read().windowOpacity == 1.0, "上限錯誤");
     }),
+    ("主題色預設、往返與無效值回退", () => {
+        var path = Path.Combine(root, "theme.json");
+        var store = new SettingsStore(path);
+        check(store.read().themeColor == ThemePalette.DEFAULT_COLOR, "主題色預設錯誤");
+        File.WriteAllText(path, "{\"width\":400}");
+        check(store.read().themeColor == ThemePalette.DEFAULT_COLOR, "舊設定主題色不相容");
+        store.save(new AppSettings { themeColor = "#2b2d33" });
+        check(store.read().themeColor == "#2B2D33", "主題色沒有保存或未正規化");
+        foreach (var invalid in new[] { "\"red\"", "\"#12345\"", "\"#GGGGGG\"", "null", "\"\"" }) {
+            File.WriteAllText(path, "{\"themeColor\":" + invalid + "}");
+            check(store.read().themeColor == ThemePalette.DEFAULT_COLOR, "無效主題色未回退：" + invalid);
+        }
+    }),
+    ("主題色板對比與深淺切換", () => {
+        var classic = ThemePalette.from(ThemePalette.DEFAULT_COLOR);
+        check(classic.paper.toHex() == "#FFF9DA" && classic.ink.toHex() == "#383122" && classic.accent.toHex() == "#6E5624",
+            "預設黃色外觀改變");
+        string[] colors = [.. ThemePalette.presets.Select(preset => preset.color), "#000000", "#FFFFFF", "#FF0000", "#0000FF",
+            "#808080", "#FFFF00", "#00FF00", "#123456", "#C0FFEE",
+            .. from r in Enumerable.Range(0, 6) from g in Enumerable.Range(0, 6) from b in Enumerable.Range(0, 6)
+               select $"#{r * 51:X2}{g * 51:X2}{b * 51:X2}"];
+        foreach (var color in colors) {
+            var palette = ThemePalette.from(color);
+            check(palette.paper.toHex() == ThemePalette.normalize(color), "底色未保留：" + color);
+            check(ThemeColor.contrast(palette.ink, palette.paper) >= 4.5, "文字對比不足：" + color);
+            check(ThemeColor.contrast(palette.muted, palette.paper) >= 3, "次要文字對比不足：" + color);
+            check(ThemeColor.contrast(palette.accentForeground, palette.accent) >= 4.5, "主要按鈕文字對比不足：" + color);
+            check(ThemeColor.contrast(palette.errorText, palette.paper) >= 3, "錯誤文字對比不足：" + color);
+            check(palette.isDark == palette.ink.luminance() > palette.paper.luminance(), "深淺文字方向錯誤：" + color);
+        }
+        check(ThemePalette.from("#000000").isDark && !ThemePalette.from("#FFFFFF").isDark, "深淺判斷錯誤");
+        check(ThemePalette.from("bad") == classic, "無效色未使用預設色板");
+    }),
+    ("HSV 往返與寬鬆色碼解析", () => {
+        for (var value = 0; value < 0x1000000; value += 0x10203) {
+            var color = new ThemeColor((byte)(value >> 16), (byte)(value >> 8), (byte)value);
+            var (hue, saturation, brightness) = color.toHsv();
+            check(ThemeColor.fromHsv(hue, saturation, brightness) == color, "HSV 往返失敗：" + color.toHex());
+        }
+        check(ThemeColor.fromHsv(360, 1, 1).toHex() == "#FF0000" && ThemeColor.fromHsv(-120, 1, 1).toHex() == "#0000FF", "色相未環繞");
+        check(ThemeColor.tryParseLoose(" fde4ec ", out var loose) && loose.toHex() == "#FDE4EC", "無井號色碼未接受");
+        check(ThemeColor.tryParseLoose("#abc", out var shorthand) && shorthand.toHex() == "#AABBCC", "三碼縮寫未展開");
+        foreach (var invalid in new[] { "", "#12", "#12345", "#GGGGGG", "#1234567", null }) {
+            check(!ThemeColor.tryParseLoose(invalid, out _), "無效色碼被接受：" + invalid);
+        }
+        check(ThemePalette.suggestions.All(color => ThemePalette.normalize(color) == color), "建議色格式錯誤");
+    }),
+    ("最近使用主題色正規化、去重與上限", () => {
+        var path = Path.Combine(root, "recent.json");
+        var store = new SettingsStore(path);
+        check(store.read().recentThemeColors.Count == 0, "最近色預設不為空");
+        File.WriteAllText(path, "{\"recentThemeColors\":null}");
+        check(store.read().recentThemeColors.Count == 0, "null 最近色未視為空");
+        File.WriteAllText(path, "{\"recentThemeColors\":[\"#abcdef\",\"bad\",\"#ABCDEF\",null,\"#111111\"]}");
+        var recent = store.read().recentThemeColors;
+        check(recent.SequenceEqual(new[] { "#ABCDEF", "#111111" }), "最近色未過濾或去重：" + string.Join(",", recent));
+        var list = new List<string>();
+        for (var index = 0; index < 10; index++) { list = ThemePalette.addRecent(list, $"#0000{index:X2}"); }
+        check(list.Count == ThemePalette.MAX_RECENT_COLORS && list[0] == "#000009" && list[^1] == "#000002", "最近色上限或順序錯誤");
+        list = ThemePalette.addRecent(list, "#000005");
+        check(list[0] == "#000005" && list.Count(color => color == "#000005") == 1, "重複最近色未移到最前");
+        store.save(new AppSettings { recentThemeColors = list });
+        check(store.read().recentThemeColors.SequenceEqual(list), "最近色沒有保存");
+    }),
     ("UTF-8 中文、多行、特殊字元與空白往返", () => {
         var document = new TodoDocument();
         string[] contents = ["中文 😀 & < > **粗體** [連結](file) ", "首行\n\n## 不應變成專案\n1. [x] 不應變成新項目\n    保留縮排\n", "\n第二行", "  空白保留  "];

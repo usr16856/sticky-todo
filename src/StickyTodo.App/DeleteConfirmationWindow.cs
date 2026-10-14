@@ -14,8 +14,7 @@ internal sealed class DeleteConfirmationWindow : Window {
         MinHeight = 280;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ShowInTaskbar = false;
-        Background = Theme.paper;
-        Foreground = Theme.ink;
+        Theme.usePaper(this);
         FontFamily = owner.FontFamily;
         FontSize = 14;
         Opacity = 1;
@@ -40,12 +39,12 @@ internal sealed class DeleteConfirmationWindow : Window {
         question.FontWeight = FontWeights.SemiBold;
         text.Children.Add(question);
         var projectLabel = Theme.label(project, 12);
-        projectLabel.Foreground = Theme.muted;
+        projectLabel.SetResourceReference(TextBlock.ForegroundProperty, Theme.MUTED);
         projectLabel.Margin = new Thickness(0, 12, 0, 6);
         text.Children.Add(projectLabel);
         text.Children.Add(Theme.label(preview));
         var hint = Theme.label("表單內尚未儲存的修改也會放棄。", 12);
-        hint.Foreground = Theme.muted;
+        hint.SetResourceReference(TextBlock.ForegroundProperty, Theme.MUTED);
         hint.Margin = new Thickness(0, 14, 0, 0);
         text.Children.Add(hint);
         body.Children.Add(new ScrollViewer { Content = text, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
