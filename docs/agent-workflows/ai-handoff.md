@@ -4,8 +4,8 @@
 
 ## 角色與單一主責
 
-- 公司 GitHub Copilot 主責已確認範圍內的實作與測試。
-- 個人 AI 主責需求釐清、驗收條件與約定範圍的重點審查。審查不自動接管實作；需要修改時交回 Copilot，除非使用者另行指派。
+- 同一需求只保留一個實作主責。使用者已明確指定 Codex 或 Copilot，或目前任務已有可核實的主責選擇時，沿用且不重問；新需求未指定且無法從目前任務確認主責時，先問一次由 Codex 直接實作或交接 Copilot，不自行預設 Copilot。
+- 個人 AI 主責需求釐清、驗收條件與約定範圍的重點審查。審查不自動接管實作；需要修改時交回已確認的實作主責，除非使用者另行指派。
 - 每項工作同一時間只有一個執行主責。狀態可為 `needs-clarification`、`ready-for-implementation`、`implementing`、`ready-for-review`、`needs-fix`、`blocked`、`done`。
 - 交接前結束或明確記錄尚在執行的命令、build、裝置操作與持續 log；存在不明程序、雙方同時寫入或主責不明時先停止接手。
 - 使用者的新指示可變更角色與範圍；把已確認的變更記入新 revision，不能由代理自行擴大。
@@ -42,13 +42,13 @@
 
 - 需求端先寫明驗收條件、待審風險與審查範圍。審查端核對完整比較目標及必要上下文，不因摘要看似正常就略過被指派的變更；不自動擴展為全專案稽核。
 - 每個發現使用穩定編號，列嚴重度、檔案／行號、觸發情境、影響、依據與建議驗證。把已確認缺陷、待釐清問題及未驗證風險分開；不以推測補滿清單。
-- Copilot 按發現編號回覆：已修正／理由充分的未修改／需使用者決策，附新快照與相應驗證。只有變更或證據失效的範圍預設需要複查。
+- 已確認的實作主責按發現編號回覆：已修正／理由充分的未修改／需使用者決策，附新快照與相應驗證。只有變更或證據失效的範圍預設需要複查。
 - 審查完成不代表使用者已批准 commit、push、merge、部署或外傳。最後完成狀態必須列剩餘 blockers 與未測範圍。
 
 ## 交接檔位置與內容
 
-- 使用者要求交接時，使用 `docs/ai-handoffs/<task-id>.md`，同目錄 `index.md` 只保留任務、目前 revision／狀態／主責與檔案連結。每個 task 一份目前主版本，更新原檔並保留必要修訂紀錄，不重複建立同內容報告。
-- 這些交接檔僅留本機，不加入 Git、不 commit／push，也不自動外傳。正式變更報告仍依專案原約定產出，交接引用既有證據。不得自動搬移、刪除或覆蓋先前報告。
+- 使用者要求交接時，使用 `docs/ai-handoffs/<task-id>.md`，`docs/ai-handoffs/README.md` 只保留任務、目前 revision／狀態／主責與檔案連結。每個 task 一份目前主版本，更新原檔並保留必要修訂紀錄，不重複建立同內容報告。
+- 這些交接檔與索引僅留本機，不加入 Git、不 commit／push，也不自動外傳。正式變更報告仍依專案原約定產出，交接引用既有證據。不得自動搬移、刪除或覆蓋先前報告。
 - 不用 `git add -A` 或其他廣泛 staging 將交接與無關改動夾帶進提交。若另需本機 exclude 規則，先在可確認 Git 狀態時依精確 repo 處理；本候選沒有修改 `.git/info/exclude`。
 - 沒有要求交接、純問答或只讀審查時不自動建立檔案。大型 log、完整 diff 與歷史推理留在既有證據位置，交接只保留必要引用。
 - 驗證範圍依 `docs/agent-workflows/verification-policy.md`；記錄理由、實際測試及結果、未測項目，不能因更換 AI 降低最低要求。
@@ -58,8 +58,8 @@ task_id: <stable-id>
 revision: 1
 updated_at: <ISO-8601-with-timezone>
 status: ready-for-implementation
-owner: company-copilot
-next_actor: company-copilot
+owner: <confirmed-implementation-owner>
+next_actor: <confirmed-next-actor>
 request: <confirmed-goal-and-acceptance>
 scope: <included-files-and-behavior>
 out_of_scope: <explicit-boundaries>
