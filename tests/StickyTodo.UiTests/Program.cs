@@ -88,7 +88,7 @@ internal static class Program {
             var saved = false;
             IReadOnlyList<string> savedProjects = [];
             var editor = new EditorWindow(["SpotCam", "其他"], "", false, () => ["SpotCam", projectName, "其他"],
-                (projects, _) => { saved = true; savedProjects = projects; }, () => { });
+                (projects, _, _, _) => { saved = true; savedProjects = projects; }, () => { });
             check(!editor.AllowsTransparency && editor.Opacity == 1.0, "Editor must remain fully opaque");
             var root = (FrameworkElement)editor.Content;
             root.Measure(new Size(350, 520));
@@ -96,7 +96,7 @@ internal static class Program {
             root.UpdateLayout();
             var controls = descendants(root).ToList();
             var textBox = controls.OfType<TextBox>().Single();
-            var combo = controls.OfType<ComboBox>().Single();
+            var combo = controls.OfType<ComboBox>().Single(control => System.Windows.Automation.AutomationProperties.GetAutomationId(control) == "ProjectSelector");
             var multiSelector = controls.OfType<ProjectMultiSelector>().Single();
             check(textBox.Template.FindName("PART_ContentHost", textBox) is ScrollViewer, "TextBox content host missing");
             combo.ApplyTemplate();
@@ -137,10 +137,10 @@ internal static class Program {
             bitmap.Render(root);
             var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
             using (var stream = File.Create(output)) { encoder.Save(stream); }
-            var editEditor = new EditorWindow(["SpotCam"], "既有內容", true, () => ["SpotCam", "其他"], (_, _) => { }, () => { });
+            var editEditor = new EditorWindow(["SpotCam"], "既有內容", true, () => ["SpotCam", "其他"], (_, _, _, _) => { }, () => { });
             var editRoot = (FrameworkElement)editEditor.Content;
             editRoot.Measure(new Size(350, 520)); editRoot.Arrange(new Rect(0, 0, 350, 520)); editRoot.UpdateLayout();
-            check(descendants(editRoot).OfType<ComboBox>().Single().Visibility == Visibility.Visible
+            check(descendants(editRoot).OfType<ComboBox>().Single(control => System.Windows.Automation.AutomationProperties.GetAutomationId(control) == "ProjectSelector").Visibility == Visibility.Visible
                 && descendants(editRoot).OfType<ProjectMultiSelector>().Single().Visibility == Visibility.Collapsed,
                 "Edit mode must remain single-project");
             var discardWindow = new DiscardDraftConfirmationWindow(editor);
@@ -158,10 +158,12 @@ internal static class Program {
             var discardEncoder = new PngBitmapEncoder(); discardEncoder.Frames.Add(BitmapFrame.Create(discardBitmap));
             using (var stream = File.Create(discardOutput)) { discardEncoder.Save(stream); }
             var pickerOutput = testThemeColorWindow();
+            TodoFeatureTests.run();
             Console.WriteLine("PASS Portable path resolution, styled draft confirmation, Windows file association, themed scrollbar, editor template loading, multi-project selection/save, single-project edit, multiline content, title binding, minimum-size conflict layout, theme color picker");
             Console.WriteLine(output);
             Console.WriteLine(discardOutput);
             Console.WriteLine(pickerOutput);
+            MainWindowIntegrationTests.run();
             return 0;
         } catch (Exception exception) {
             Console.WriteLine(exception);

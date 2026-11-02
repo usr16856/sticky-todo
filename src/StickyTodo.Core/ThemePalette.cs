@@ -94,6 +94,14 @@ public sealed record ThemePalette(
     ThemeColor errorText) {
     public const string DEFAULT_COLOR = "#FFF9DA";
 
+    public ThemeColor highPriority => ensureContrast(
+        isDark ? new(0xFF, 0x8A, 0x80) : new(0xB2, 0x22, 0x22), paper, 4.5,
+        isDark ? new(255, 255, 255) : new(0, 0, 0), steps: 100);
+
+    public ThemeColor lowPriority => ensureContrast(
+        isDark ? new(0x86, 0xB7, 0xFF) : new(0x1E, 0x5A, 0xA8), paper, 4.5,
+        isDark ? new(255, 255, 255) : new(0, 0, 0), steps: 100);
+
     public static readonly IReadOnlyList<ThemePreset> presets = [
         new("便條黃", DEFAULT_COLOR),
         new("櫻花粉", "#FDE4EC"),
@@ -183,9 +191,9 @@ public sealed record ThemePalette(
             readable(new ThemeColor(0xFF, 0x8A, 0x80), darkInk, paper));
     }
 
-    private static ThemeColor ensureContrast(ThemeColor color, ThemeColor background, double target, ThemeColor extreme) {
-        for (var step = 0; step <= 20; step++) {
-            var candidate = mix(color, extreme, step / 20.0);
+    private static ThemeColor ensureContrast(ThemeColor color, ThemeColor background, double target, ThemeColor extreme, int steps = 20) {
+        for (var step = 0; step <= steps; step++) {
+            var candidate = mix(color, extreme, step / (double)steps);
             if (ThemeColor.contrast(candidate, background) >= target) { return candidate; }
         }
         return extreme;

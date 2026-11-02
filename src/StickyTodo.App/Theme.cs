@@ -11,6 +11,8 @@ internal static class Theme {
     internal const string MUTED = "Muted";
     internal const string ACCENT = "Accent";
     internal const string ERROR = "ErrorText";
+    internal const string PRIORITY_HIGH = "PriorityHigh";
+    internal const string PRIORITY_LOW = "PriorityLow";
     internal const string CAPTION_HOVER = "CaptionHover";
     internal const string CAPTION_PRESSED = "CaptionPressed";
 
@@ -44,7 +46,21 @@ internal static class Theme {
         resources[CAPTION_HOVER] = brush(palette.captionHover);
         resources[CAPTION_PRESSED] = brush(palette.captionPressed);
         resources[ERROR] = brush(palette.errorText);
+        resources[PRIORITY_HIGH] = brush(palette.highPriority);
+        resources[PRIORITY_LOW] = brush(palette.lowPriority);
     }
+
+    internal static string getPriorityName(TodoPriority priority) => priority switch {
+        TodoPriority.HIGH => "高",
+        TodoPriority.LOW => "低",
+        _ => "一般"
+    };
+
+    internal static string getPriorityBrushKey(TodoPriority priority) => priority switch {
+        TodoPriority.HIGH => PRIORITY_HIGH,
+        TodoPriority.LOW => PRIORITY_LOW,
+        _ => INK
+    };
 
     internal static Color toColor(ThemeColor color) => Color.FromArgb(color.a, color.r, color.g, color.b);
 

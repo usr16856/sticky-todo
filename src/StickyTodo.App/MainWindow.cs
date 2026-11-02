@@ -248,16 +248,10 @@ internal sealed class MainWindow : Window {
                     // Match the visible CJK glyph center, which sits below the line-box center.
                     Height = 22, Margin = new Thickness(0, 8, 7, 0), ToolTip = item.isCompleted ? "取消完成" : "標記完成" };
                 System.Windows.Automation.AutomationProperties.SetName(check, $"{group.name} 第 {index + 1} 項完成狀態");
+                System.Windows.Automation.AutomationProperties.SetHelpText(check, "優先等級：" + Theme.getPriorityName(item.priority));
                 check.Click += (_, _) => toggleItem(group.name, itemIndex, check.IsChecked == true);
                 row.Children.Add(check);
-                var text = Theme.label($"{index + 1}. {item.content}");
-                text.LineHeight = 22;
-                text.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;
-                text.Margin = new Thickness(0, 6, 4, 6);
-                if (item.isCompleted) {
-                    text.TextDecorations = TextDecorations.Strikethrough;
-                    text.SetResourceReference(TextBlock.ForegroundProperty, Theme.MUTED);
-                }
+                var text = createTodoText(item, index);
                 Grid.SetColumn(text, 1);
                 row.Children.Add(text);
                 var editLabel = Theme.label("編輯", text.FontSize);
@@ -267,7 +261,9 @@ internal sealed class MainWindow : Window {
                 // The one-DIP button border puts its text at the same six-DIP inset as the task text.
                 var edit = new Button { Content = editLabel, Padding = new Thickness(6, 0, 6, 0),
                     Height = 24, Margin = new Thickness(3, 5, 3, 0),
-                    VerticalAlignment = VerticalAlignment.Top, ToolTip = $"編輯 {group.name} 第 {index + 1} 項" };
+                    VerticalAlignment = VerticalAlignment.Top,
+                    ToolTip = $"編輯 {group.name} 第 {index + 1} 項\n優先等級：{Theme.getPriorityName(item.priority)}" };
+                System.Windows.Automation.AutomationProperties.SetHelpText(edit, "優先等級：" + Theme.getPriorityName(item.priority));
                 edit.Click += (_, _) => openEditor(group.name, itemIndex);
                 Grid.SetColumn(edit, 2);
                 row.Children.Add(edit);
@@ -277,6 +273,19 @@ internal sealed class MainWindow : Window {
             expander.Content = rows;
             groupPanel.Children.Add(expander);
         }
+    }
+
+    internal static TextBlock createTodoText(TodoItem item, int index) {
+        var text = Theme.label($"{index + 1}. {item.content}");
+        text.LineHeight = 22;
+        text.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;
+        text.Margin = new Thickness(0, 6, 4, 6);
+        text.SetResourceReference(TextBlock.ForegroundProperty, item.isCompleted ? Theme.MUTED : Theme.getPriorityBrushKey(item.priority));
+        if (item.isCompleted) { text.TextDecorations = TextDecorations.Strikethrough; }
+        var priorityDescription = "優先等級：" + Theme.getPriorityName(item.priority);
+        text.ToolTip = priorityDescription;
+        System.Windows.Automation.AutomationProperties.SetHelpText(text, priorityDescription);
+        return text;
     }
 
     private void toggleItem(string project, int index, bool completed) {
@@ -300,7 +309,9 @@ internal sealed class MainWindow : Window {
         var baseline = snapshot;
         var originalProject = project;
         var originalIndex = index;
-        var content = project == null ? "" : baseline.document.groups.Single(group => group.name == project).items[index].content;
+        var originalItem = project == null ? new TodoItem("") : baseline.document.groups.Single(group => group.name == project).items[index];
+        var content = originalItem.content;
+        IReadOnlyList<TodoMatch> matchingItems = project == null ? [] : baseline.document.findMatchingItems(project, index);
         IReadOnlyList<string> selectedProjects = project == null
             ? (settings.lastProjects.Count > 0 ? settings.lastProjects : [settings.lastProject])
             : [project];
@@ -314,11 +325,11 @@ internal sealed class MainWindow : Window {
             } catch { selectedProjects = ["其他"]; }
         }
         editor = new EditorWindow(selectedProjects, content, project != null, () => ProjectCatalog.discover(projectRoot),
-            (targetProjects, text) => {
+            (targetProjects, text, priority, syncMatchingContent) => {
                 var document = baseline.document.clone();
                 var isAdding = originalProject == null;
-                if (isAdding) { document.addToProjects(targetProjects, text); }
-                else { document.edit(originalProject!, originalIndex, targetProjects.Single(), text); }
+                if (isAdding) { document.addToProjects(targetProjects, text, priority); }
+                else { document.edit(originalProject!, originalIndex, targetProjects.Single(), text, priority, syncMatchingContent); }
                 snapshot = store.save(document, baseline.version);
                 if (isAdding) {
                     settings.lastProjects = targetProjects.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -340,7 +351,7 @@ internal sealed class MainWindow : Window {
                 snapshot = store.save(document, baseline.version);
                 hasDataError = false;
                 showStatus("已刪除 " + DateTime.Now.ToString("HH:mm"));
-            }) { Owner = this };
+            }, priority: originalItem.priority, matchingItems: matchingItems) { Owner = this };
         try { editor.ShowDialog(); } finally { editor = null; render(); }
     }
 
@@ -388,12 +399,28 @@ internal sealed class MainWindow : Window {
         };
         menu.Items.Add(startup);
         menu.Items.Add(createThemeMenu());
+        menu.Items.Add(createPriorityMenu());
         menu.Items.Add(new Separator());
         var quit = new MenuItem { Header = "結束 StickyTodo" };
         quit.Click += (_, _) => exit();
         menu.Items.Add(quit);
         menu.PlacementTarget = anchor;
         menu.IsOpen = true;
+    }
+
+    internal static MenuItem createPriorityMenu() {
+        var menu = new MenuItem { Header = "優先等級說明" };
+        foreach (var priority in new[] { TodoPriority.HIGH, TodoPriority.NORMAL, TodoPriority.LOW }) {
+            var colorName = priority == TodoPriority.HIGH ? "紅色" : priority == TodoPriority.LOW ? "藍色" : "主題文字色";
+            var label = Theme.label($"{Theme.getPriorityName(priority)}（{colorName}）");
+            label.SetResourceReference(TextBlock.ForegroundProperty, Theme.getPriorityBrushKey(priority));
+            var item = new MenuItem { Header = label, StaysOpenOnClick = true, Focusable = false };
+            System.Windows.Automation.AutomationProperties.SetName(item, label.Text);
+            menu.Items.Add(item);
+        }
+        menu.Items.Add(new Separator());
+        menu.Items.Add(new MenuItem { Header = "已完成項目以淡色刪除線顯示", StaysOpenOnClick = true, Focusable = false });
+        return menu;
     }
 
     private MenuItem createThemeMenu() {
