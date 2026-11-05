@@ -60,6 +60,7 @@ internal sealed class EditorWindow : Window {
         AutomationProperties.SetAutomationId(contentInput, "TodoContent");
         AutomationProperties.SetName(contentInput, "待辦內容");
         AutomationProperties.SetAutomationId(syncMatchesCheckBox, "SyncMatchingContent");
+        AutomationProperties.SetAutomationId(recoverButton, "DataConflictRecovery");
         Title = isEdit ? "編輯待辦" : "新增待辦";
         Width = 410;
         Height = 540;
@@ -79,7 +80,7 @@ internal sealed class EditorWindow : Window {
         var header = new StackPanel();
         var projectRow = new DockPanel { Margin = new Thickness(0, 14, 0, 0) };
         var refreshButton = new Button { Content = "重新整理", ToolTip = "重新讀取專案資料夾" };
-        refreshButton.Click += (_, _) => refreshProjects(getSelectedProjects());
+        refreshButton.Click += (_, _) => refreshProjects();
         DockPanel.SetDock(refreshButton, Dock.Right);
         projectRow.Children.Add(refreshButton);
         projectRow.Children.Add(Theme.label("專案"));
@@ -206,25 +207,30 @@ internal sealed class EditorWindow : Window {
         recoverButton.Visibility = Visibility.Visible;
     }
 
-    private void refreshProjects(IEnumerable<string> selectedProjects) {
+    internal void refreshProjects() => refreshProjects(getSelectedProjects(), preserveEmptySelection: true);
+
+    private void refreshProjects(IEnumerable<string> selectedProjects, bool preserveEmptySelection = false) {
+        var selected = selectedProjects.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         try {
-            var projects = getProjects();
-            if (originalProject != null && !projects.Contains(originalProject, StringComparer.OrdinalIgnoreCase)) {
-                projects.Insert(0, originalProject);
-            }
+            var retained = isEditMode && originalProject != null ? selected.Append(originalProject) : selected;
+            var projects = ProjectCatalog.merge(getProjects(), retained);
+            if (projectSelector.Items.Cast<string>().SequenceEqual(projects, StringComparer.Ordinal)) { return; }
             projectSelector.ItemsSource = projects;
-            var selected = selectedProjects.Where(project => projects.Contains(project, StringComparer.OrdinalIgnoreCase)).ToList();
-            if (selected.Count == 0) { selected.Add("其他"); }
-            projectSelector.SelectedItem = projects.FirstOrDefault(project => project.Equals(selected[0], StringComparison.OrdinalIgnoreCase)) ?? "其他";
-            multiProjectSelector.setProjects(projects, selected);
+            if (selected.Count == 0 && !preserveEmptySelection) { selected.Add("其他"); }
+            projectSelector.SelectedItem = projects.FirstOrDefault(project => selected.Count > 0
+                && project.Equals(selected[0], StringComparison.OrdinalIgnoreCase));
+            multiProjectSelector.setProjects(projects, selected, useFallback: !preserveEmptySelection);
             updateSelectorMode();
         } catch (Exception exception) {
             errorLabel.Text = "無法讀取專案清單：" + exception.Message;
-            var projects = new[] { originalProject ?? "其他", "其他" }.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            projectSelector.ItemsSource = projects;
-            projectSelector.SelectedIndex = 0;
-            multiProjectSelector.setProjects(projects, selectedProjects);
-            updateSelectorMode();
+            if (projectSelector.Items.Count == 0) {
+                var projects = ProjectCatalog.merge([], originalProjects);
+                projectSelector.ItemsSource = projects;
+                projectSelector.SelectedItem = projects.FirstOrDefault(project => selected.Count > 0
+                    && project.Equals(selected[0], StringComparison.OrdinalIgnoreCase)) ?? "其他";
+                multiProjectSelector.setProjects(projects, selected, useFallback: !preserveEmptySelection);
+                updateSelectorMode();
+            }
         }
     }
 
