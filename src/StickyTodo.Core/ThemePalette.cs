@@ -102,6 +102,19 @@ public sealed record ThemePalette(
         isDark ? new(0x86, 0xB7, 0xFF) : new(0x1E, 0x5A, 0xA8), paper, 4.5,
         isDark ? new(255, 255, 255) : new(0, 0, 0), steps: 100);
 
+    public ThemeColor getDeviceStateColor(DeviceUsageState state) {
+        var white = new ThemeColor(255, 255, 255);
+        var black = new ThemeColor(0, 0, 0);
+        var useLightText = ThemeColor.contrast(inputSurface, white) > ThemeColor.contrast(inputSurface, black);
+        var color = state switch {
+            DeviceUsageState.UNMARKED => useLightText ? new ThemeColor(0x90, 0xCA, 0xF9) : new(0x15, 0x65, 0xC0),
+            DeviceUsageState.IDLE => useLightText ? new ThemeColor(0x81, 0xC7, 0x84) : new(0x23, 0x7A, 0x36),
+            DeviceUsageState.IN_USE => useLightText ? new ThemeColor(0xFF, 0xB7, 0x4D) : new(0xA6, 0x47, 0x00),
+            _ => throw new ArgumentOutOfRangeException(nameof(state))
+        };
+        return ensureContrast(color, inputSurface, 4.5, useLightText ? white : black, steps: 100);
+    }
+
     public static readonly IReadOnlyList<ThemePreset> presets = [
         new("便條黃", DEFAULT_COLOR),
         new("櫻花粉", "#FDE4EC"),

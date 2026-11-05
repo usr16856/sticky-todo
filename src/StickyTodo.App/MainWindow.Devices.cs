@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Threading;
 using StickyTodo.Core;
 
@@ -15,7 +16,8 @@ internal sealed partial class MainWindow {
     private readonly IDeviceDiscovery deviceDiscovery;
     private readonly CancellationTokenSource deviceCancellation = new();
     private readonly DispatcherTimer deviceTimer = new() { Interval = TimeSpan.FromSeconds(5) };
-    private readonly Expander devicesExpander = new() { Margin = new Thickness(0, 0, 0, 12), HorizontalContentAlignment = HorizontalAlignment.Stretch };
+    private readonly Border deviceSurface = new() { Margin = new Thickness(0, 10, 0, 0), CornerRadius = new CornerRadius(6) };
+    private readonly Expander devicesExpander = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch };
     private readonly TextBlock deviceHeading = Theme.label("測試機使用狀態", 15);
     private readonly TextBlock deviceWarning = new() { TextWrapping = TextWrapping.Wrap, FontSize = 12, Visibility = Visibility.Collapsed };
     private readonly StackPanel deviceRows = new();
@@ -29,16 +31,22 @@ internal sealed partial class MainWindow {
     private DeviceUsage? deviceEditorBaseline;
 
     private void initializeDevicePanel() {
+        deviceSurface.SetResourceReference(Border.BackgroundProperty, "InputSurface");
+        deviceSurface.Child = devicesExpander;
         deviceHeading.FontWeight = FontWeights.SemiBold;
         devicesExpander.Header = deviceHeading;
         devicesExpander.IsExpanded = !settings.isDevicePanelCollapsed;
         AutomationProperties.SetAutomationId(devicesExpander, "DeviceUsagePanel");
         devicesExpander.Expanded += (_, _) => { settings.isDevicePanelCollapsed = false; saveSettings(); };
         devicesExpander.Collapsed += (_, _) => { settings.isDevicePanelCollapsed = true; saveSettings(); };
-        var content = new StackPanel { Margin = new Thickness(10, 4, 0, 0) };
-        refreshDevicesButton.HorizontalAlignment = HorizontalAlignment.Right;
+        var content = new StackPanel { Margin = new Thickness(0, 4, 0, 0) };
+        refreshDevicesButton.HorizontalAlignment = HorizontalAlignment.Left;
+        refreshDevicesButton.HorizontalContentAlignment = HorizontalAlignment.Left;
         refreshDevicesButton.Click += async (_, _) => await refreshDevices();
         content.Children.Add(refreshDevicesButton);
+        // Match the standard button's text inset: margin 3 + border 1 + padding 12.
+        deviceRows.Margin = new Thickness(16, 0, 0, 0);
+        deviceWarning.Margin = new Thickness(16, 0, 0, 0);
         deviceWarning.SetResourceReference(TextBlock.ForegroundProperty, Theme.ERROR);
         AutomationProperties.SetAutomationId(deviceWarning, "DeviceScanWarning");
         content.Children.Add(deviceWarning);
@@ -46,8 +54,11 @@ internal sealed partial class MainWindow {
         deviceScroller.Resources[typeof(System.Windows.Controls.Primitives.ScrollBar)] = Application.Current.FindResource("MinimalVerticalScrollBar");
         content.Children.Add(deviceScroller);
         devicesExpander.Content = content;
+        updateDeviceHeight();
         deviceTimer.Tick += async (_, _) => await refreshDevices();
     }
+
+    private void updateDeviceHeight() => deviceScroller.MaxHeight = Math.Clamp(Height - 350, 32, 220);
 
     internal async Task refreshDevices() {
         if (isScanningDevices || isExiting || snapshot == null || hasDataError) { return; }
@@ -113,7 +124,12 @@ internal sealed partial class MainWindow {
             row.Children.Add(edit);
             var details = new StackPanel();
             var connection = connectedSerials.Contains(device.serial) ? "已連線" : isDeviceScanComplete ? "離線" : "連線未知";
-            details.Children.Add(Theme.label($"{device.name} · {connection} · {device.stateName}", 13));
+            var title = Theme.label("", 13);
+            title.Inlines.Add(new Run($"{device.name} · {connection} · "));
+            var stateText = new Run(device.stateName) { FontWeight = FontWeights.SemiBold };
+            stateText.SetResourceReference(TextElement.ForegroundProperty, Theme.getDeviceStateBrushKey(device.state));
+            title.Inlines.Add(stateText);
+            details.Children.Add(title);
             details.Children.Add(Theme.label(device.serial, 11));
             if (device.state == DeviceUsageState.IN_USE) { details.Children.Add(Theme.label($"{device.user}：{device.purpose}", 12)); }
             var updated = Theme.label("更新：" + device.updatedAt.ToLocalTime().ToString("MM/dd HH:mm:ss"), 11);
