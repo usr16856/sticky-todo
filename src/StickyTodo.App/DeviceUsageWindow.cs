@@ -80,6 +80,7 @@ internal sealed class DeviceUsageWindow : Window {
         fields.Children.Add(updatedLabel);
         foreach (var state in Enum.GetValues<DeviceUsageState>()) {
             var option = new ComboBoxItem { Content = DeviceUsage.getStateName(state), Tag = state };
+            option.SetResourceReference(ForegroundProperty, Theme.getDeviceStateBrushKey(state));
             stateSelector.Items.Add(option);
             if (state == device.state) { stateSelector.SelectedItem = option; }
         }
@@ -107,6 +108,7 @@ internal sealed class DeviceUsageWindow : Window {
     }
 
     private void updateFields() {
+        stateSelector.SetResourceReference(ForegroundProperty, Theme.getDeviceStateBrushKey(selectedState));
         var isInUse = selectedState == DeviceUsageState.IN_USE;
         userInput.IsEnabled = purposeInput.IsEnabled = isInUse;
         if (!isInUse) { userInput.Text = purposeInput.Text = ""; }

@@ -41,9 +41,32 @@ internal static class DeviceUsageTests {
         check(File.ReadAllBytes(store.filePath).SequenceEqual(bytes) && File.ReadAllBytes(store.filePath + ".bak").SequenceEqual(backup), "定期掃描反覆寫檔");
 
         var panel = input<Expander>(main, "DeviceUsagePanel");
+        main.UpdateLayout();
+        var refreshText = descendants(field<Button>(main, "refreshDevicesButton")).OfType<TextBlock>().Single();
+        var deviceTitle = descendants(field<StackPanel>(main, "deviceRows")).OfType<TextBlock>().First(text =>
+            new System.Windows.Documents.TextRange(text.ContentStart, text.ContentEnd).Text.StartsWith("測試", StringComparison.Ordinal));
+        check(Math.Abs(refreshText.TranslatePoint(new Point(), main).X - deviceTitle.TranslatePoint(new Point(), main).X) < 1,
+            "重新整理文字沒有與裝置名稱左緣對齊");
+        var hideBox = field<CheckBox>(main, "hideBox");
+        var projects = field<ScrollViewer>(main, "todoScroller");
+        var panelTop = panel.TranslatePoint(new Point(), main).Y;
+        check(panelTop + panel.ActualHeight <= hideBox.TranslatePoint(new Point(), main).Y, "測試機區域不在隱藏已完成上方");
+        projects.ScrollToVerticalOffset(120);
+        main.UpdateLayout();
+        check(projects.VerticalOffset > 0 && Math.Abs(panel.TranslatePoint(new Point(), main).Y - panelTop) < 1,
+            "測試機區域跟著專案清單捲動");
+        var originalHeight = main.Height;
+        main.Height = main.MinHeight;
+        main.UpdateLayout();
+        check(projects.ViewportHeight >= 30 && hideBox.TranslatePoint(new Point(), main).Y + hideBox.ActualHeight < main.ActualHeight,
+            $"最小視窗時固定區域擠掉專案清單或隱藏已完成：viewport={projects.ViewportHeight}, hideY={hideBox.TranslatePoint(new Point(), main).Y}, height={main.ActualHeight}");
+        main.Height = originalHeight;
+        projects.ScrollToTop();
+        main.UpdateLayout();
         panel.IsExpanded = false;
         check(new SettingsStore(Path.Combine(settingsDirectory, "settings.json")).read().isDevicePanelCollapsed, "未記住收合狀態");
         panel.IsExpanded = true;
+        renderRefreshStates(main, Path.GetDirectoryName(store.filePath)!);
         openDevice(main, "UI-A", editor => {
             choose(editor, DeviceUsageState.IN_USE);
             click(editor, "儲存");
@@ -60,11 +83,13 @@ internal static class DeviceUsageTests {
         discovery.result = new([]);
         main.refreshDevices().GetAwaiter().GetResult();
         check(field<StackPanel>(main, "deviceRows").Children.Count == 2
-            && descendants(field<StackPanel>(main, "deviceRows")).OfType<TextBlock>().Any(text => text.Text.Contains("離線 · 使用中")), "離線未保留使用紀錄");
+            && descendants(field<StackPanel>(main, "deviceRows")).OfType<TextBlock>().Any(text =>
+                new System.Windows.Documents.TextRange(text.ContentStart, text.ContentEnd).Text.Contains("離線 · 使用中")), "離線未保留使用紀錄");
         discovery.error = new IOException("找不到 ADB");
         main.refreshDevices().GetAwaiter().GetResult();
         check(input<TextBlock>(main, "DeviceScanWarning").Visibility == Visibility.Visible
-            && descendants(field<StackPanel>(main, "deviceRows")).OfType<TextBlock>().Any(text => text.Text.Contains("連線未知 · 使用中")), "掃描失敗誤判閒置或未提示");
+            && descendants(field<StackPanel>(main, "deviceRows")).OfType<TextBlock>().Any(text =>
+                new System.Windows.Documents.TextRange(text.ContentStart, text.ContentEnd).Text.Contains("連線未知 · 使用中")), "掃描失敗誤判閒置或未提示");
         discovery.error = null;
         discovery.result = new([new("UI-A", "測試手機"), new("UI-B", "測試平板")]);
         main.refreshDevices().GetAwaiter().GetResult();
@@ -133,6 +158,69 @@ internal static class DeviceUsageTests {
         using (var stream = File.Create(imagePath)) { encoder.Save(stream); }
         Console.WriteLine("PASS 測試機五秒背景登記、掃描不重疊、狀態表單與必填、離線及失敗恢復、收合保存、同台衝突、外部 Markdown 與待辦共同編輯");
         Console.WriteLine(imagePath);
+    }
+
+    private static void renderRefreshStates(MainWindow main, string outputDirectory) {
+        var button = field<Button>(main, "refreshDevicesButton");
+        var surface = field<Border>(main, "deviceSurface");
+        var mouseKey = (DependencyPropertyKey)typeof(UIElement).GetField("IsMouseOverPropertyKey", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
+        var focusKey = (DependencyPropertyKey)typeof(UIElement).GetField("IsKeyboardFocusedPropertyKey", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
+        var pressedKey = (DependencyPropertyKey)typeof(System.Windows.Controls.Primitives.ButtonBase)
+            .GetField("IsPressedPropertyKey", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
+        var originalTheme = Theme.currentColor;
+        var originalMouse = button.IsMouseOver;
+        var originalFocus = button.IsKeyboardFocused;
+        try {
+            foreach (var theme in new[] { "#F3E1F7", "#2B2D33" }) {
+                Theme.apply(theme);
+                main.UpdateLayout();
+                var width = (int)Math.Ceiling(surface.ActualWidth);
+                var height = (int)Math.Ceiling(surface.ActualHeight);
+                var drawing = new DrawingVisual();
+                using (var context = drawing.RenderOpen()) {
+                    context.DrawRectangle((Brush)Application.Current.FindResource(Theme.PAPER), null, new Rect(0, 0, (width + 12) * 5, height + 32));
+                    var names = new[] { "一般", "懸停", "按下", "鍵盤焦點", "停用" };
+                    for (var index = 0; index < names.Length; index++) {
+                        // Render the actual WPF style triggers without operating a physical device or moving the user's cursor.
+                        button.SetValue(mouseKey, index is 1 or 2);
+                        button.SetValue(pressedKey, index == 2);
+                        button.SetValue(focusKey, index == 3);
+                        button.IsEnabled = index != 4;
+                        main.UpdateLayout();
+                        var text = descendants(button).OfType<TextBlock>().Single();
+                        var textBounds = text.TransformToAncestor(button).TransformBounds(new Rect(text.RenderSize));
+                        check(textBounds.Left >= 12 && button.ActualWidth - textBounds.Right >= 12,
+                            names[index] + "狀態的按鈕底色貼住文字");
+                        var title = descendants(field<StackPanel>(main, "deviceRows")).OfType<TextBlock>().First(block =>
+                            new System.Windows.Documents.TextRange(block.ContentStart, block.ContentEnd).Text.StartsWith("測試", StringComparison.Ordinal));
+                        check(Math.Abs(text.TranslatePoint(new Point(), main).X - title.TranslatePoint(new Point(), main).X) < 1,
+                            names[index] + "狀態的文字左緣未對齊");
+                        var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+                        var preview = new DrawingVisual();
+                        using (var canvas = preview.RenderOpen()) {
+                            canvas.DrawRectangle(new VisualBrush(surface), null, new Rect(0, 0, width, height));
+                        }
+                        bitmap.Render(preview);
+                        context.DrawText(new FormattedText(names[index], System.Globalization.CultureInfo.GetCultureInfo("zh-TW"),
+                            FlowDirection.LeftToRight, new Typeface("Segoe UI"), 14, (Brush)Application.Current.FindResource(Theme.INK), 1),
+                            new Point(index * (width + 12), 4));
+                        context.DrawImage(bitmap, new Rect(index * (width + 12), 28, width, height));
+                    }
+                }
+                var result = new RenderTargetBitmap((width + 12) * 5, height + 32, 96, 96, PixelFormats.Pbgra32);
+                result.Render(drawing);
+                var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(result));
+                var path = Path.Combine(outputDirectory, "refresh-states-" + theme[1..] + ".png");
+                using (var stream = File.Create(path)) { encoder.Save(stream); }
+                Console.WriteLine(path);
+            }
+        } finally {
+            button.SetValue(mouseKey, originalMouse);
+            button.SetValue(pressedKey, false);
+            button.SetValue(focusKey, originalFocus);
+            button.IsEnabled = true;
+            Theme.apply(originalTheme);
+        }
     }
 
     private static void openDevice(MainWindow main, string serial, Action<DeviceUsageWindow> action) =>

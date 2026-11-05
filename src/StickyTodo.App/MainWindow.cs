@@ -106,6 +106,8 @@ internal sealed partial class MainWindow : Window {
         addButton.Click += (_, _) => openEditor(null, -1);
         toolbar.Children.Add(addButton);
         header.Children.Add(toolbar);
+        initializeDevicePanel();
+        header.Children.Add(deviceSurface);
         hideBox.IsChecked = settings.hideCompleted;
         hideBox.Click += (_, _) => { settings.hideCompleted = hideBox.IsChecked == true; render(); saveSettings(); };
         header.Children.Add(hideBox);
@@ -137,11 +139,7 @@ internal sealed partial class MainWindow : Window {
         footer.Children.Add(reloadButton);
         DockPanel.SetDock(footer, Dock.Bottom);
         root.Children.Add(footer);
-        initializeDevicePanel();
-        var body = new StackPanel();
-        body.Children.Add(devicesExpander);
-        body.Children.Add(groupPanel);
-        todoScroller.Content = body;
+        todoScroller.Content = groupPanel;
         todoScroller.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
         todoScroller.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
         todoScroller.Margin = new Thickness(0, 10, 0, 0);
@@ -163,7 +161,7 @@ internal sealed partial class MainWindow : Window {
         trayIcon.DoubleClick += (_, _) => Dispatcher.Invoke(showWindow);
         Closing += onClosing;
         LocationChanged += (_, _) => scheduleSettings();
-        SizeChanged += (_, _) => scheduleSettings();
+        SizeChanged += (_, _) => { updateDeviceHeight(); scheduleSettings(); };
         settingsTimer.Tick += (_, _) => { settingsTimer.Stop(); saveSettings(); };
         pollTimer.Tick += (_, _) => poll();
         Loaded += (_, _) => {

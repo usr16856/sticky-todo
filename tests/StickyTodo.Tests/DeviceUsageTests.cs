@@ -4,6 +4,19 @@ using StickyTodo.Core;
 internal static class DeviceUsageTests {
     internal static IEnumerable<(string name, Action action)> createTests(string root) {
         var time = DateTimeOffset.Parse("2026-11-05T10:30:00+08:00");
+        yield return ("測試機三種狀態在淺深主題及自訂色維持對比與區分", () => {
+            var colors = ThemePalette.presets.Select(preset => preset.color).Concat(
+                from red in Enumerable.Range(0, 6) from green in Enumerable.Range(0, 6) from blue in Enumerable.Range(0, 6)
+                select $"#{red * 51:X2}{green * 51:X2}{blue * 51:X2}");
+            foreach (var color in colors) {
+                var palette = ThemePalette.from(color);
+                var states = Enum.GetValues<DeviceUsageState>().Select(palette.getDeviceStateColor).ToList();
+                check(states.Distinct().Count() == 3, "三種狀態顏色相同：" + color);
+                foreach (var stateColor in states) {
+                    check(ThemeColor.contrast(stateColor, palette.inputSurface) >= 4.5, "狀態文字對比不足：" + color);
+                }
+            }
+        });
         DeviceUsage sample() => new("SERIAL-A", "測試機 | 名稱", DeviceUsageState.IN_USE, "Codex", @"測試 C:\work\a | b", time);
         yield return ("裝置表格往返、跳脫字元、時區與待辦獨立", () => {
             var document = new TodoDocument();

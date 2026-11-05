@@ -15,6 +15,9 @@ internal static class Theme {
     internal const string PRIORITY_LOW = "PriorityLow";
     internal const string CAPTION_HOVER = "CaptionHover";
     internal const string CAPTION_PRESSED = "CaptionPressed";
+    internal const string DEVICE_UNMARKED = "DeviceUnmarked";
+    internal const string DEVICE_IDLE = "DeviceIdle";
+    internal const string DEVICE_IN_USE = "DeviceInUse";
 
     internal static string currentColor { get; private set; } = ThemePalette.DEFAULT_COLOR;
 
@@ -48,7 +51,17 @@ internal static class Theme {
         resources[ERROR] = brush(palette.errorText);
         resources[PRIORITY_HIGH] = brush(palette.highPriority);
         resources[PRIORITY_LOW] = brush(palette.lowPriority);
+        resources[DEVICE_UNMARKED] = brush(palette.getDeviceStateColor(DeviceUsageState.UNMARKED));
+        resources[DEVICE_IDLE] = brush(palette.getDeviceStateColor(DeviceUsageState.IDLE));
+        resources[DEVICE_IN_USE] = brush(palette.getDeviceStateColor(DeviceUsageState.IN_USE));
     }
+
+    internal static string getDeviceStateBrushKey(DeviceUsageState state) => state switch {
+        DeviceUsageState.UNMARKED => DEVICE_UNMARKED,
+        DeviceUsageState.IDLE => DEVICE_IDLE,
+        DeviceUsageState.IN_USE => DEVICE_IN_USE,
+        _ => throw new System.ArgumentOutOfRangeException(nameof(state))
+    };
 
     internal static string getPriorityName(TodoPriority priority) => priority switch {
         TodoPriority.HIGH => "高",
