@@ -15,7 +15,7 @@ using Forms = System.Windows.Forms;
 
 namespace StickyTodo;
 
-internal sealed class MainWindow : Window {
+internal sealed partial class MainWindow : Window {
     private const string STARTUP_KEY = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private readonly string projectRoot;
     private readonly TodoStore store;
@@ -48,10 +48,12 @@ internal sealed class MainWindow : Window {
     private bool isReady;
     private bool hasDataError;
 
-    internal MainWindow(string projectRoot, string dataPath, string settingsDirectory, bool isTestInstance, EventWaitHandle activationEvent) {
+    internal MainWindow(string projectRoot, string dataPath, string settingsDirectory, bool isTestInstance, EventWaitHandle activationEvent,
+        IDeviceDiscovery? deviceDiscovery = null) {
         this.projectRoot = projectRoot;
         this.isTestInstance = isTestInstance;
         this.activationEvent = activationEvent;
+        this.deviceDiscovery = deviceDiscovery ?? new AdbDeviceDiscovery();
         Theme.usePaper(this);
         projectWarning.SetResourceReference(TextBlock.ForegroundProperty, Theme.ERROR);
         FontFamily = new FontFamily("Segoe UI, Microsoft JhengHei UI");
@@ -135,7 +137,11 @@ internal sealed class MainWindow : Window {
         footer.Children.Add(reloadButton);
         DockPanel.SetDock(footer, Dock.Bottom);
         root.Children.Add(footer);
-        todoScroller.Content = groupPanel;
+        initializeDevicePanel();
+        var body = new StackPanel();
+        body.Children.Add(devicesExpander);
+        body.Children.Add(groupPanel);
+        todoScroller.Content = body;
         todoScroller.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
         todoScroller.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
         todoScroller.Margin = new Thickness(0, 10, 0, 0);
@@ -166,6 +172,8 @@ internal sealed class MainWindow : Window {
             try { store.initialize(); loadData(); } catch (Exception exception) { showDataError(exception); }
             if (settingsWarning != null) { showStatus(settingsWarning, true); }
             pollTimer.Start();
+            deviceTimer.Start();
+            _ = refreshDevices();
         };
         SystemEvents.DisplaySettingsChanged += onDisplaySettingsChanged;
         SourceInitialized += (_, _) => applyOpacity();
@@ -217,6 +225,7 @@ internal sealed class MainWindow : Window {
 
     private void render() {
         var scrollOffset = todoScroller.VerticalOffset;
+        renderDevices();
         groupPanel.Children.Clear();
         if (snapshot == null) { return; }
         var count = snapshot.document.groups.Sum(group => group.items.Count);
@@ -311,7 +320,7 @@ internal sealed class MainWindow : Window {
             var document = snapshot.document.clone();
             var group = document.groups.Single(group => group.name == project);
             group.items[index] = group.items[index] with { isCompleted = completed };
-            snapshot = store.save(document, snapshot.version);
+            snapshot = store.saveTodoChanges(document, snapshot);
             render();
             showStatus("已儲存 " + DateTime.Now.ToString("HH:mm"));
         } catch (Exception exception) {
@@ -322,7 +331,7 @@ internal sealed class MainWindow : Window {
     }
 
     private void openEditor(string? project, int index, string? initialProject = null) {
-        if (snapshot == null || hasDataError || editor != null) { return; }
+        if (snapshot == null || hasDataError || editor != null || deviceEditor != null) { return; }
         var baseline = snapshot;
         var originalProject = project;
         var originalIndex = index;
@@ -345,7 +354,7 @@ internal sealed class MainWindow : Window {
                 var isAdding = originalProject == null;
                 if (isAdding) { document.addToProjects(targetProjects, text, priority); }
                 else { document.edit(originalProject!, originalIndex, targetProjects.Single(), text, priority, syncMatchingContent); }
-                snapshot = store.save(document, baseline.version);
+                snapshot = store.saveTodoChanges(document, baseline);
                 if (isAdding) {
                     settings.lastProjects = targetProjects.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
                     settings.lastProject = settings.lastProjects[0];
@@ -363,7 +372,7 @@ internal sealed class MainWindow : Window {
                 if (originalProject == null) { throw new InvalidOperationException("新增草稿不能刪除原待辦。"); }
                 var document = baseline.document.clone();
                 document.remove(originalProject, originalIndex);
-                snapshot = store.save(document, baseline.version);
+                snapshot = store.saveTodoChanges(document, baseline);
                 hasDataError = false;
                 showStatus("已刪除 " + DateTime.Now.ToString("HH:mm"));
             }, priority: originalItem.priority, matchingItems: matchingItems) { Owner = this };
@@ -379,8 +388,7 @@ internal sealed class MainWindow : Window {
         if (snapshot == null) { return; }
         try {
             if (store.readVersion() == snapshot.version && !hasDataError) { return; }
-            if (editor != null) { editor.notifyExternalChange(); return; }
-            loadData();
+            adoptSnapshot(store.read());
         } catch (Exception exception) {
             if (editor == null) { showDataError(exception); }
         }
@@ -561,6 +569,7 @@ internal sealed class MainWindow : Window {
         keepWindowVisible();
         Activate();
         if (editor != null) { editor.Activate(); }
+        if (deviceEditor != null) { deviceEditor.Activate(); }
     }
 
     private void onClosing(object? sender, CancelEventArgs args) {
@@ -575,9 +584,15 @@ internal sealed class MainWindow : Window {
             editor.Close();
             if (editor?.IsVisible == true) { return; }
         }
+        if (deviceEditor != null) {
+            deviceEditor.Close();
+            if (deviceEditor?.IsVisible == true) { return; }
+        }
         saveSettings();
         isExiting = true;
         pollTimer.Stop();
+        deviceTimer.Stop();
+        deviceCancellation.Cancel();
         settingsTimer.Stop();
         SystemEvents.DisplaySettingsChanged -= onDisplaySettingsChanged;
         trayIcon.Visible = false;
