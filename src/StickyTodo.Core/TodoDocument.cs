@@ -16,9 +16,13 @@ public sealed class TodoGroup(string name) {
 
 public sealed class TodoDocument {
     public List<TodoGroup> groups { get; } = [];
+    public List<DeviceUsage> devices { get; } = [];
+    public bool hasDeviceSection { get; set; }
 
     public TodoDocument clone() {
         var copy = new TodoDocument();
+        copy.devices.AddRange(devices);
+        copy.hasDeviceSection = hasDeviceSection;
         foreach (var group in groups) {
             var newGroup = new TodoGroup(group.name);
             newGroup.items.AddRange(group.items);
@@ -26,6 +30,10 @@ public sealed class TodoDocument {
         }
         return copy;
     }
+
+    public bool hasSameTodos(TodoDocument other) => groups.Count == other.groups.Count
+        && groups.Zip(other.groups).All(pair => pair.First.name == pair.Second.name
+            && pair.First.items.SequenceEqual(pair.Second.items));
 
     public TodoGroup getOrAddGroup(string name) {
         if (string.IsNullOrWhiteSpace(name) || name.Contains('\n') || name.Contains('\r')) {
@@ -130,6 +138,9 @@ public static partial class MarkdownCodec {
 
     public static string serialize(TodoDocument document) {
         var text = new StringBuilder("# 我的待辦\n");
+        if (document.hasDeviceSection || document.devices.Count > 0) {
+            text.Append('\n').Append(DeviceMarkdownCodec.serialize(document.devices));
+        }
         foreach (var group in document.groups.Where(group => group.items.Count > 0)
                      .OrderBy(group => group.name == "其他" ? 1 : 0)
                      .ThenBy(group => group.name, StringComparer.OrdinalIgnoreCase)) {
@@ -166,6 +177,15 @@ public static partial class MarkdownCodec {
             var line = lines[index];
             // Metadata must immediately precede an item, never a continuation or another annotation.
             if (pendingPriority.HasValue && !getItemPattern().IsMatch(line)) { throw invalid(index); }
+            if (line == DeviceMarkdownCodec.START) {
+                if (document.hasDeviceSection || current != null) { throw invalid(index); }
+                var end = Array.IndexOf(lines, DeviceMarkdownCodec.END, index + 1);
+                if (end < 0) { throw invalid(index); }
+                document.devices.AddRange(DeviceMarkdownCodec.parse(lines[(index + 1)..end]));
+                document.hasDeviceSection = true;
+                index = end;
+                continue;
+            }
             if (line.StartsWith("    ", StringComparison.Ordinal)) {
                 if (current == null || current.items.Count == 0) {
                     throw invalid(index);

@@ -9,6 +9,7 @@ public sealed class AppSettings {
     public double? top { get; set; }
     public bool isTopmost { get; set; }
     public bool hideCompleted { get; set; }
+    public bool isDevicePanelCollapsed { get; set; }
     public double windowOpacity { get; set; } = 1.0;
     public string lastProject { get; set; } = "其他";
     public List<string> lastProjects { get; set; } = [];

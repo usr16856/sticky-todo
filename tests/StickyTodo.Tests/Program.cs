@@ -252,6 +252,7 @@ var tests = new List<(string name, Action action)> {
     })
 };
 tests.AddRange(TodoFeatureTests.createTests(root));
+tests.AddRange(DeviceUsageTests.createTests(root));
 var failures = 0;
 foreach (var test in tests) {
     try { test.action(); Console.WriteLine("PASS " + test.name); }

@@ -25,12 +25,14 @@ internal static class MainWindowIntegrationTests {
         initial.document.groups[1].items.Add(new("共同需求\n第二行", true));
         store.save(initial.document, initial.version);
         using var activationEvent = new EventWaitHandle(false, EventResetMode.AutoReset);
-        var main = new MainWindow(projectRoot, store.filePath, Path.Combine(root, "settings"), true, activationEvent);
+        var discovery = new DeviceUsageTests.FakeDiscovery();
+        var main = new MainWindow(projectRoot, store.filePath, Path.Combine(root, "settings"), true, activationEvent, discovery);
         try {
             Directory.Move(projectRoot, projectRoot + ".offline");
             main.Show();
             main.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
             ProjectRefreshTests.run(main, projectRoot, store);
+            DeviceUsageTests.run(main, store, discovery, Path.Combine(root, "settings"));
             edit(main, "A", editor => {
                 var content = input<TextBox>(editor, "TodoContent");
                 check(input<CheckBox>(editor, "SyncMatchingContent").IsChecked == true, "實際主視窗未帶入同步目標");
