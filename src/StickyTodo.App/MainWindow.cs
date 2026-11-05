@@ -24,6 +24,10 @@ internal sealed class MainWindow : Window {
     private readonly EventWaitHandle activationEvent;
     private readonly bool isTestInstance;
     private readonly StackPanel groupPanel = new();
+    private readonly ScrollViewer todoScroller = new();
+    private readonly TextBlock projectWarning = new() { TextWrapping = TextWrapping.Wrap, FontSize = 12,
+        Margin = new Thickness(0, 6, 0, 0), Visibility = Visibility.Collapsed };
+    private List<string> discoveredProjects = ["其他"];
     private readonly TextBlock status = new() { TextWrapping = TextWrapping.Wrap, FontSize = 12, Margin = new Thickness(0, 8, 0, 0) };
     private readonly TextBlock summary = Theme.label("隨手記下，慢慢完成。", 12);
     private readonly Button addButton = new() { Content = "＋ 新增待辦", MinHeight = 36 };
@@ -49,6 +53,7 @@ internal sealed class MainWindow : Window {
         this.isTestInstance = isTestInstance;
         this.activationEvent = activationEvent;
         Theme.usePaper(this);
+        projectWarning.SetResourceReference(TextBlock.ForegroundProperty, Theme.ERROR);
         FontFamily = new FontFamily("Segoe UI, Microsoft JhengHei UI");
         FontSize = 14;
         addButton.SetResourceReference(StyleProperty, "PrimaryButton");
@@ -125,12 +130,15 @@ internal sealed class MainWindow : Window {
         Grid.SetColumn(opacitySlider, 1);
         statusRow.Children.Add(opacitySlider);
         footer.Children.Add(statusRow);
+        footer.Children.Add(projectWarning);
         reloadButton.Click += (_, _) => loadData();
         footer.Children.Add(reloadButton);
         DockPanel.SetDock(footer, Dock.Bottom);
         root.Children.Add(footer);
-        var todoScroller = new ScrollViewer { Content = groupPanel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Margin = new Thickness(0, 10, 0, 0) };
+        todoScroller.Content = groupPanel;
+        todoScroller.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+        todoScroller.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+        todoScroller.Margin = new Thickness(0, 10, 0, 0);
         todoScroller.Resources[typeof(System.Windows.Controls.Primitives.ScrollBar)] =
             Application.Current.FindResource("MinimalVerticalScrollBar");
         root.Children.Add(todoScroller);
@@ -193,6 +201,7 @@ internal sealed class MainWindow : Window {
             hasDataError = false;
             addButton.IsEnabled = true;
             reloadButton.Visibility = Visibility.Collapsed;
+            refreshProjectCatalog();
             render();
             showStatus("已載入 · 變更會自動儲存");
         } catch (Exception exception) { showDataError(exception); }
@@ -207,35 +216,41 @@ internal sealed class MainWindow : Window {
     }
 
     private void render() {
+        var scrollOffset = todoScroller.VerticalOffset;
         groupPanel.Children.Clear();
         if (snapshot == null) { return; }
         var count = snapshot.document.groups.Sum(group => group.items.Count);
         var completed = snapshot.document.groups.Sum(group => group.items.Count(item => item.isCompleted));
         summary.Text = count == 0 ? "隨手記下，慢慢完成。" : $"{count - completed} 項待辦 · {completed} 項已完成";
-        if (count == 0) {
-            var empty = new StackPanel { Margin = new Thickness(12, 52, 12, 0) };
-            var emptyTitle = Theme.label("把想到的事，先放這裡。", 19);
-            emptyTitle.TextAlignment = TextAlignment.Center;
-            empty.Children.Add(emptyTitle);
-            var hint = Theme.label("按「新增待辦」選擇專案，\n記下下一個想做的功能。", 13);
-            hint.TextAlignment = TextAlignment.Center;
-            hint.SetResourceReference(TextBlock.ForegroundProperty, Theme.MUTED);
-            hint.Margin = new Thickness(0, 12, 0, 0);
-            empty.Children.Add(hint);
-            groupPanel.Children.Add(empty);
-        }
-        foreach (var group in snapshot.document.groups.Where(group => group.items.Count > 0)
-                     .OrderBy(group => group.name == "其他" ? 1 : 0).ThenBy(group => group.name, StringComparer.OrdinalIgnoreCase)) {
+        foreach (var name in getProjectNames()) {
+            var group = snapshot.document.groups.FirstOrDefault(group => group.name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                ?? new TodoGroup(name);
             var heading = Theme.label(group.name, 16);
             heading.FontWeight = FontWeights.SemiBold;
-            var expander = new Expander { Header = heading, IsExpanded = !settings.collapsedProjects.Contains(group.name),
+            var expander = new Expander { Header = heading, IsExpanded = !settings.collapsedProjects.Contains(group.name, StringComparer.OrdinalIgnoreCase),
                 Margin = new Thickness(0, 1, 0, 3), HorizontalContentAlignment = HorizontalAlignment.Stretch };
-            expander.Expanded += (_, _) => { settings.collapsedProjects.Remove(group.name); saveSettings(); };
+            expander.Expanded += (_, _) => {
+                settings.collapsedProjects.RemoveAll(name => name.Equals(group.name, StringComparison.OrdinalIgnoreCase));
+                saveSettings();
+            };
             expander.Collapsed += (_, _) => {
-                if (!settings.collapsedProjects.Contains(group.name)) { settings.collapsedProjects.Add(group.name); }
+                if (!settings.collapsedProjects.Contains(group.name, StringComparer.OrdinalIgnoreCase)) { settings.collapsedProjects.Add(group.name); }
                 saveSettings();
             };
             var rows = new StackPanel { Margin = new Thickness(10, 3, 0, 0) };
+            if (group.items.Count == 0) {
+                var emptyRow = new DockPanel { Margin = new Thickness(0, 0, 0, 7), LastChildFill = false };
+                var add = new Button { Content = "新增待辦", IsEnabled = !hasDataError,
+                    ToolTip = $"在 {group.name} 新增待辦" };
+                DockPanel.SetDock(add, Dock.Right);
+                add.Click += (_, _) => openEditor(null, -1, group.name);
+                emptyRow.Children.Add(add);
+                var hint = Theme.label("尚無待辦", 12);
+                hint.VerticalAlignment = VerticalAlignment.Center;
+                hint.SetResourceReference(TextBlock.ForegroundProperty, Theme.MUTED);
+                emptyRow.Children.Add(hint);
+                rows.Children.Add(emptyRow);
+            }
             for (var index = 0; index < group.items.Count; index++) {
                 var itemIndex = index;
                 var item = group.items[index];
@@ -273,6 +288,8 @@ internal sealed class MainWindow : Window {
             expander.Content = rows;
             groupPanel.Children.Add(expander);
         }
+        todoScroller.UpdateLayout();
+        todoScroller.ScrollToVerticalOffset(scrollOffset);
     }
 
     internal static TextBlock createTodoText(TodoItem item, int index) {
@@ -304,7 +321,7 @@ internal sealed class MainWindow : Window {
         }
     }
 
-    private void openEditor(string? project, int index) {
+    private void openEditor(string? project, int index, string? initialProject = null) {
         if (snapshot == null || hasDataError || editor != null) { return; }
         var baseline = snapshot;
         var originalProject = project;
@@ -313,18 +330,16 @@ internal sealed class MainWindow : Window {
         var content = originalItem.content;
         IReadOnlyList<TodoMatch> matchingItems = project == null ? [] : baseline.document.findMatchingItems(project, index);
         IReadOnlyList<string> selectedProjects = project == null
-            ? (settings.lastProjects.Count > 0 ? settings.lastProjects : [settings.lastProject])
+            ? (initialProject != null ? [initialProject] : settings.lastProjects.Count > 0 ? settings.lastProjects : [settings.lastProject])
             : [project];
         if (project == null) {
-            try {
-                var available = ProjectCatalog.discover(projectRoot);
-                selectedProjects = selectedProjects
-                    .Where(selected => available.Contains(selected, StringComparer.OrdinalIgnoreCase))
-                    .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-                if (selectedProjects.Count == 0) { selectedProjects = ["其他"]; }
-            } catch { selectedProjects = ["其他"]; }
+            var available = readProjectNames();
+            selectedProjects = selectedProjects
+                .Where(selected => available.Contains(selected, StringComparer.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (selectedProjects.Count == 0) { selectedProjects = ["其他"]; }
         }
-        editor = new EditorWindow(selectedProjects, content, project != null, () => ProjectCatalog.discover(projectRoot),
+        editor = new EditorWindow(selectedProjects, content, project != null, readProjectNames,
             (targetProjects, text, priority, syncMatchingContent) => {
                 var document = baseline.document.clone();
                 var isAdding = originalProject == null;
@@ -357,6 +372,10 @@ internal sealed class MainWindow : Window {
 
     private void poll() {
         if (activationEvent.WaitOne(0)) { showWindow(); }
+        if (refreshProjectCatalog()) {
+            render();
+            editor?.refreshProjects();
+        }
         if (snapshot == null) { return; }
         try {
             if (store.readVersion() == snapshot.version && !hasDataError) { return; }
@@ -364,6 +383,29 @@ internal sealed class MainWindow : Window {
             loadData();
         } catch (Exception exception) {
             if (editor == null) { showDataError(exception); }
+        }
+    }
+
+    private List<string> getProjectNames() => ProjectCatalog.merge(discoveredProjects,
+        snapshot?.document.groups.Where(group => group.items.Count > 0).Select(group => group.name) ?? []);
+
+    private List<string> readProjectNames() {
+        if (refreshProjectCatalog()) { render(); }
+        return getProjectNames();
+    }
+
+    private bool refreshProjectCatalog() {
+        try {
+            var projects = ProjectCatalog.discover(projectRoot);
+            projectWarning.Text = "";
+            projectWarning.Visibility = Visibility.Collapsed;
+            if (discoveredProjects.SequenceEqual(projects, StringComparer.Ordinal)) { return false; }
+            discoveredProjects = projects;
+            return true;
+        } catch (Exception exception) {
+            projectWarning.Text = "無法讀取專案資料夾，保留目前清單並自動重試：" + exception.Message;
+            projectWarning.Visibility = Visibility.Visible;
+            return false;
         }
     }
 

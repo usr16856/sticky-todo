@@ -52,7 +52,7 @@ internal sealed class ProjectMultiSelector : Grid {
         .Where(choice => choice.IsChecked == true)
         .Select(choice => (string)choice.Tag).ToList();
 
-    internal void setProjects(IEnumerable<string> projects, IEnumerable<string> selectedProjects) {
+    internal void setProjects(IEnumerable<string> projects, IEnumerable<string> selectedProjects, bool useFallback = true) {
         var selected = selectedProjects.ToHashSet(StringComparer.OrdinalIgnoreCase);
         choices.Clear();
         choicesPanel.Children.Clear();
@@ -68,7 +68,7 @@ internal sealed class ProjectMultiSelector : Grid {
             choices.Add(choice);
             choicesPanel.Children.Add(choice);
         }
-        if (!choices.Any(choice => choice.IsChecked == true) && choices.Count > 0) {
+        if (useFallback && !choices.Any(choice => choice.IsChecked == true) && choices.Count > 0) {
             var fallback = choices.FirstOrDefault(choice => string.Equals((string)choice.Tag, "其他", StringComparison.OrdinalIgnoreCase)) ?? choices[0];
             fallback.IsChecked = true;
         }

@@ -215,9 +215,19 @@ var tests = new List<(string name, Action action)> {
     }),
     ("專案選單包含非 Git 專案並排除管理目錄", () => {
         var projectRoot = Path.Combine(root, "projects"); Directory.CreateDirectory(projectRoot);
-        foreach (var name in new[] { "Zebra", "alpha", "docs", ".codex-artifacts", "node_modules", "其他", "hidden" }) { Directory.CreateDirectory(Path.Combine(projectRoot, name)); }
+        foreach (var name in new[] { "Zebra", "alpha", "docs", ".codex-artifacts", "node_modules", "artifacts", "bin", "obj", "其他", "hidden", "system", "Fii-ios-lib" }) { Directory.CreateDirectory(Path.Combine(projectRoot, name)); }
         File.SetAttributes(Path.Combine(projectRoot, "hidden"), FileAttributes.Hidden);
-        check(ProjectCatalog.discover(projectRoot).SequenceEqual(new[] { "alpha", "Zebra", "其他" }), "專案清單錯誤");
+        File.SetAttributes(Path.Combine(projectRoot, "system"), FileAttributes.System);
+        check(ProjectCatalog.discover(projectRoot).SequenceEqual(new[] { "alpha", "Fii-ios-lib", "Zebra", "其他" }), "專案清單錯誤");
+        Directory.CreateDirectory(Path.Combine(projectRoot, "New"));
+        Directory.Move(Path.Combine(projectRoot, "Zebra"), Path.Combine(projectRoot, "Renamed"));
+        Directory.Delete(Path.Combine(projectRoot, "alpha"));
+        check(ProjectCatalog.discover(projectRoot).SequenceEqual(new[] { "Fii-ios-lib", "New", "Renamed", "其他" }), "資料夾變化未反映");
+    }),
+    ("專案清單合併歷史、大小寫去重與其他固定最後", () => {
+        check(ProjectCatalog.merge(["zebra", "alpha", "其他", "ALPHA"], ["History", "Alpha", "其他"])
+            .SequenceEqual(new[] { "Alpha", "History", "zebra", "其他" }), "合併排序或歷史名稱遺失");
+        check(ProjectCatalog.merge([], []).SequenceEqual(new[] { "其他" }), "空清單未保留其他");
     }),
     ("設定重新讀取保留視窗、置頂、篩選及收合", () => {
         var store = new SettingsStore(Path.Combine(root, "settings", "settings.json"));

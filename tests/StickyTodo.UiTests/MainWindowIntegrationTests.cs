@@ -27,8 +27,10 @@ internal static class MainWindowIntegrationTests {
         using var activationEvent = new EventWaitHandle(false, EventResetMode.AutoReset);
         var main = new MainWindow(projectRoot, store.filePath, Path.Combine(root, "settings"), true, activationEvent);
         try {
+            Directory.Move(projectRoot, projectRoot + ".offline");
             main.Show();
             main.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+            ProjectRefreshTests.run(main, projectRoot, store);
             edit(main, "A", editor => {
                 var content = input<TextBox>(editor, "TodoContent");
                 check(input<CheckBox>(editor, "SyncMatchingContent").IsChecked == true, "實際主視窗未帶入同步目標");
