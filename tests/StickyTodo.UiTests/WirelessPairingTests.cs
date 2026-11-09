@@ -223,7 +223,17 @@ internal static class WirelessPairingTests {
         Console.WriteLine("PASS 主視窗無線配對入口、服務注入與掃描重疊時刷新清單");
     }
 
-    internal static void runExit(MainWindow main, FakeWirelessAdb wireless) {
+    internal static void runExit(MainWindow main, FakeWirelessAdb wireless, DeviceUsageTests.FakeDiscovery discovery) {
+        var scanCleanup = new TaskCompletionSource<DeviceScanResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        discovery.pending = scanCleanup;
+        var scanCalls = discovery.calls;
+        var scan = main.refreshDevices();
+        // Queue a post-pairing refresh through the real callback before exiting during another operation.
+        openMainWindow(main, window => {
+            input<TextBox>(window, "WirelessPairingCode").Text = "012345";
+            click(window, "PairWirelessDevice");
+            check(text(window, "WirelessConnectionStatus") == "已連線", "未建立配對後排隊刷新情境");
+        });
         var pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         wireless.pairAction = async (_, _, token) => { await pending.Task; token.ThrowIfCancellationRequested(); };
         openMainWindow(main, window => {
@@ -232,10 +242,16 @@ internal static class WirelessPairingTests {
             var exiting = (Task)typeof(MainWindow).GetMethod("exit", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(main, null)!;
             check(wireless.lastToken.IsCancellationRequested && !exiting.IsCompleted, "App 結束未等待配對清理");
             pending.SetResult();
+            waitFor(() => !window.IsVisible, "配對視窗未完成清理");
+            try {
+                check(discovery.lastToken.IsCancellationRequested && !exiting.IsCompleted && !scan.IsCompleted,
+                    "App 結束未等待仍在清理的裝置/電量掃描");
+            } finally { discovery.pending = null; scanCleanup.TrySetResult(discovery.result); }
             waitFor(() => exiting.IsCompleted, "App 結束等待配對未完成");
             exiting.GetAwaiter().GetResult();
+            check(discovery.calls == scanCalls + 1, "退出時仍啟動排隊的裝置掃描");
         });
-        Console.WriteLine("PASS App 結束取消並等待配對作業完成清理");
+        Console.WriteLine("PASS App 結束取消並等待配對及裝置/電量掃描完成清理");
     }
 
     private static void openMainWindow(MainWindow main, Action<WirelessPairingWindow> action) {

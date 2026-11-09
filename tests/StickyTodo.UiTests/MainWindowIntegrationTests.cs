@@ -34,6 +34,7 @@ internal static class MainWindowIntegrationTests {
             main.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
             ProjectRefreshTests.run(main, projectRoot, store);
             DeviceUsageTests.run(main, store, discovery, Path.Combine(root, "settings"));
+            DeviceBatteryTests.run(main, store, discovery, root);
             WirelessPairingTests.runMainWindow(main, discovery, wireless);
             edit(main, "A", editor => {
                 var content = input<TextBox>(editor, "TodoContent");
@@ -86,7 +87,7 @@ internal static class MainWindowIntegrationTests {
                 && saved.document.groups[1].items[0].content == "同步更新\n第二行", "恢復草稿仍同步或覆蓋外部資料");
             Console.WriteLine("PASS 實際主視窗同步存檔、獨立等級與完成狀態、單筆修改、備份、衝突阻擋及草稿另存");
             Console.WriteLine("Integration evidence: " + root);
-            WirelessPairingTests.runExit(main, wireless);
+            WirelessPairingTests.runExit(main, wireless, discovery);
         } finally {
             typeof(MainWindow).GetMethod("exit", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(main, null);
         }

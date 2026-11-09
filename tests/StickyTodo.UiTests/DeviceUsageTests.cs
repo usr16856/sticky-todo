@@ -19,8 +19,10 @@ internal static class DeviceUsageTests {
         internal TaskCompletionSource<DeviceScanResult>? pending;
         internal Exception? error;
         internal int calls;
+        internal CancellationToken lastToken;
         public Task<DeviceScanResult> scan(CancellationToken cancellationToken) {
             calls++;
+            lastToken = cancellationToken;
             if (error != null) { return Task.FromException<DeviceScanResult>(error); }
             return pending?.Task ?? Task.FromResult(result);
         }
