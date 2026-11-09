@@ -35,7 +35,9 @@ public sealed record DeviceUsage(string serial, string name, DeviceUsageState st
     }
 }
 
-public sealed record ConnectedDevice(string serial, string name);
+public sealed record ConnectedDevice(string serial, string name) {
+    public DeviceBatteryInfo? battery { get; init; }
+}
 public sealed record DeviceScanResult(IReadOnlyList<ConnectedDevice> devices, bool isComplete = true, string? warning = null);
 
 public interface IDeviceDiscovery {

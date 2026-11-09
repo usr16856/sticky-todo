@@ -16,6 +16,7 @@ internal sealed partial class MainWindow {
     private readonly IDeviceDiscovery deviceDiscovery;
     private readonly IWirelessAdb wirelessAdb;
     private readonly CancellationTokenSource deviceCancellation = new();
+    private Task deviceScanTask = Task.CompletedTask;
     private readonly DispatcherTimer deviceTimer = new() { Interval = TimeSpan.FromSeconds(5) };
     private readonly Border deviceSurface = new() { Margin = new Thickness(0, 10, 0, 0), CornerRadius = new CornerRadius(6) };
     private readonly Expander devicesExpander = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch };
@@ -27,6 +28,8 @@ internal sealed partial class MainWindow {
     private readonly Button refreshDevicesButton = new() { Content = "重新整理測試機" };
     private readonly Button pairWirelessButton = new() { Content = "無線配對" };
     private HashSet<string> connectedSerials = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, DeviceBatteryInfo?> deviceBatteries = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, TextBlock> batteryLabels = new(StringComparer.Ordinal);
     private bool isDeviceScanComplete;
     private bool isScanningDevices;
     private bool needsDeviceRefresh;
@@ -69,8 +72,13 @@ internal sealed partial class MainWindow {
 
     private void updateDeviceHeight() => deviceScroller.MaxHeight = Math.Clamp(Height - 350, 32, 220);
 
-    internal async Task refreshDevices() {
-        if (isScanningDevices || isExiting || snapshot == null || hasDataError) { return; }
+    internal Task refreshDevices() {
+        if (isScanningDevices || isExiting || snapshot == null || hasDataError) { return Task.CompletedTask; }
+        deviceScanTask = scanDevices();
+        return deviceScanTask;
+    }
+
+    private async Task scanDevices() {
         isScanningDevices = true;
         refreshDevicesButton.IsEnabled = false;
         try {
@@ -79,19 +87,24 @@ internal sealed partial class MainWindow {
             var connections = result.devices.Select(device => device.serial).ToHashSet(StringComparer.Ordinal);
             var hasConnectionChanges = !connectedSerials.SetEquals(connections) || isDeviceScanComplete != result.isComplete;
             connectedSerials = connections;
+            deviceBatteries.Clear();
+            foreach (var device in result.devices) { deviceBatteries[device.serial] = device.battery; }
             isDeviceScanComplete = result.isComplete;
             deviceWarning.Text = result.warning ?? "";
             deviceWarning.Visibility = string.IsNullOrEmpty(result.warning) ? Visibility.Collapsed : Visibility.Visible;
             adoptSnapshot(store.registerDevices(result.devices), hasConnectionChanges);
+            updateBatteryLabels();
         } catch (OperationCanceledException) when (isExiting) { }
         catch (Exception exception) {
             var hasConnectionChanges = connectedSerials.Count > 0 || isDeviceScanComplete;
             connectedSerials.Clear();
+            deviceBatteries.Clear();
             isDeviceScanComplete = false;
             deviceWarning.Text = exception is OperationCanceledException ? "ADB 讀取逾時，稍後自動重試。"
                 : "測試機資訊尚未更新，稍後自動重試：" + exception.Message;
             deviceWarning.Visibility = Visibility.Visible;
             if (hasConnectionChanges) { renderDevices(); }
+            else { updateBatteryLabels(); }
         } finally {
             isScanningDevices = false;
             refreshDevicesButton.IsEnabled = true;
@@ -132,6 +145,7 @@ internal sealed partial class MainWindow {
     private void renderDevices() {
         var scrollOffset = deviceScroller.VerticalOffset;
         deviceRows.Children.Clear();
+        batteryLabels.Clear();
         var devices = snapshot?.document.devices ?? [];
         deviceHeading.Text = $"測試機使用狀態 · {devices.Count(device => device.state == DeviceUsageState.IN_USE)} 使用中 / {devices.Count} 台";
         if (devices.Count == 0) {
@@ -154,6 +168,10 @@ internal sealed partial class MainWindow {
             title.Inlines.Add(stateText);
             details.Children.Add(title);
             details.Children.Add(Theme.label(device.serial, 11));
+            var batteryLabel = Theme.label(getBatteryText(device.serial), 12);
+            AutomationProperties.SetAutomationId(batteryLabel, "DeviceBattery:" + device.serial);
+            batteryLabels.Add(device.serial, batteryLabel);
+            details.Children.Add(batteryLabel);
             if (device.state == DeviceUsageState.IN_USE) { details.Children.Add(Theme.label($"{device.user}：{device.purpose}", 12)); }
             var updated = Theme.label("更新：" + device.updatedAt.ToLocalTime().ToString("MM/dd HH:mm:ss"), 11);
             updated.ToolTip = device.updatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss zzz");
@@ -164,6 +182,16 @@ internal sealed partial class MainWindow {
         }
         deviceScroller.UpdateLayout();
         deviceScroller.ScrollToVerticalOffset(scrollOffset);
+    }
+
+    private string getBatteryText(string serial) => connectedSerials.Contains(serial)
+        ? deviceBatteries.GetValueOrDefault(serial)?.displayText ?? "電量未知" : "電量未知";
+
+    private void updateBatteryLabels() {
+        foreach (var (serial, label) in batteryLabels) {
+            var text = getBatteryText(serial);
+            if (label.Text != text) { label.Text = text; }
+        }
     }
 
     private void openDeviceEditor(string serial) {

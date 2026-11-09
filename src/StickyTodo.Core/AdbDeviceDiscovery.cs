@@ -7,6 +7,7 @@ public sealed class AdbDeviceDiscovery(Func<IReadOnlyList<string>, CancellationT
         var run = command ?? AdbCommand.run;
         var output = await run(["devices", "-l"], timeout.Token);
         var devices = new Dictionary<string, ConnectedDevice>(StringComparer.Ordinal);
+        var transports = new Dictionary<string, string>(StringComparer.Ordinal);
         var warnings = new List<string>();
         foreach (var line in TodoDocument.normalizeLines(output).Split('\n')) {
             var columns = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
@@ -33,11 +34,27 @@ public sealed class AdbDeviceDiscovery(Func<IReadOnlyList<string>, CancellationT
                     continue;
                 }
                 var name = values.GetValueOrDefault("ro.product.model");
-                devices.TryAdd(serial, new(serial, string.IsNullOrWhiteSpace(name) ? serial : name));
+                if (devices.TryAdd(serial, new(serial, string.IsNullOrWhiteSpace(name) ? serial : name))) { transports.Add(serial, transport); }
             } catch (Exception exception) when (exception is not OperationCanceledException) {
                 warnings.Add($"{transport}：{exception.Message}");
             }
         }
+        // Identify every device first so an optional battery read cannot discard connection information.
+        foreach (var (serial, transport) in transports) {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (timeout.IsCancellationRequested) { break; }
+            using var batteryTimeout = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token);
+            batteryTimeout.CancelAfter(TimeSpan.FromSeconds(2));
+            try {
+                var batteryOutput = await run(["-s", transport, "shell", "dumpsys", "battery"], batteryTimeout.Token);
+                if (!batteryTimeout.IsCancellationRequested) { devices[serial] = devices[serial] with { battery = DeviceBatteryInfo.parse(batteryOutput) }; }
+            } catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) {
+                // Battery and scan budgets expire independently of device connectivity.
+            } catch (Exception exception) when (exception is not OperationCanceledException) {
+                System.Diagnostics.Debug.WriteLine(exception);
+            }
+        }
+        cancellationToken.ThrowIfCancellationRequested();
         return new(devices.Values.OrderBy(device => device.name, StringComparer.OrdinalIgnoreCase).ToList(),
             warnings.Count == 0, warnings.Count == 0 ? null : string.Join("\n", warnings));
     }

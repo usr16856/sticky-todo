@@ -597,8 +597,9 @@ internal sealed partial class MainWindow : Window {
             isExiting = true;
             pollTimer.Stop();
             deviceTimer.Stop();
-            deviceCancellation.Cancel();
             settingsTimer.Stop();
+            deviceCancellation.Cancel();
+            await deviceScanTask;
             SystemEvents.DisplaySettingsChanged -= onDisplaySettingsChanged;
             trayIcon.Visible = false;
             trayIcon.Dispose();
