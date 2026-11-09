@@ -14,6 +14,7 @@ namespace StickyTodo;
 
 internal sealed partial class MainWindow {
     private readonly IDeviceDiscovery deviceDiscovery;
+    private readonly IWirelessAdb wirelessAdb;
     private readonly CancellationTokenSource deviceCancellation = new();
     private readonly DispatcherTimer deviceTimer = new() { Interval = TimeSpan.FromSeconds(5) };
     private readonly Border deviceSurface = new() { Margin = new Thickness(0, 10, 0, 0), CornerRadius = new CornerRadius(6) };
@@ -24,10 +25,13 @@ internal sealed partial class MainWindow {
     private readonly ScrollViewer deviceScroller = new() { MaxHeight = 220, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
     private readonly Button refreshDevicesButton = new() { Content = "重新整理測試機" };
+    private readonly Button pairWirelessButton = new() { Content = "無線配對" };
     private HashSet<string> connectedSerials = new(StringComparer.Ordinal);
     private bool isDeviceScanComplete;
     private bool isScanningDevices;
+    private bool needsDeviceRefresh;
     private DeviceUsageWindow? deviceEditor;
+    private WirelessPairingWindow? wirelessPairingWindow;
     private DeviceUsage? deviceEditorBaseline;
 
     private void initializeDevicePanel() {
@@ -43,7 +47,12 @@ internal sealed partial class MainWindow {
         refreshDevicesButton.HorizontalAlignment = HorizontalAlignment.Left;
         refreshDevicesButton.HorizontalContentAlignment = HorizontalAlignment.Left;
         refreshDevicesButton.Click += async (_, _) => await refreshDevices();
-        content.Children.Add(refreshDevicesButton);
+        var actions = new WrapPanel();
+        actions.Children.Add(refreshDevicesButton);
+        AutomationProperties.SetAutomationId(pairWirelessButton, "OpenWirelessPairing");
+        pairWirelessButton.Click += (_, _) => openWirelessPairing();
+        actions.Children.Add(pairWirelessButton);
+        content.Children.Add(actions);
         // Match the standard button's text inset: margin 3 + border 1 + padding 12.
         deviceRows.Margin = new Thickness(16, 0, 0, 0);
         deviceWarning.Margin = new Thickness(16, 0, 0, 0);
@@ -86,7 +95,21 @@ internal sealed partial class MainWindow {
         } finally {
             isScanningDevices = false;
             refreshDevicesButton.IsEnabled = true;
+            if (needsDeviceRefresh && !isExiting) {
+                needsDeviceRefresh = false;
+                await refreshDevices();
+            }
         }
+    }
+
+    private void openWirelessPairing() {
+        if (wirelessPairingWindow != null || isExiting || isRequestingExit) { return; }
+        wirelessPairingWindow = new WirelessPairingWindow(wirelessAdb, async () => {
+            if (isScanningDevices) { needsDeviceRefresh = true; }
+            else { await refreshDevices(); }
+        }) { Owner = this };
+        try { wirelessPairingWindow.ShowDialog(); }
+        finally { wirelessPairingWindow = null; }
     }
 
     private void adoptSnapshot(TodoSnapshot latest, bool hasConnectionChanges = false) {

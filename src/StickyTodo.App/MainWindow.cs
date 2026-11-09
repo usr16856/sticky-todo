@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
@@ -45,15 +46,17 @@ internal sealed partial class MainWindow : Window {
     private TodoSnapshot? snapshot;
     private EditorWindow? editor;
     private bool isExiting;
+    private bool isRequestingExit;
     private bool isReady;
     private bool hasDataError;
 
     internal MainWindow(string projectRoot, string dataPath, string settingsDirectory, bool isTestInstance, EventWaitHandle activationEvent,
-        IDeviceDiscovery? deviceDiscovery = null) {
+        IDeviceDiscovery? deviceDiscovery = null, IWirelessAdb? wirelessAdb = null) {
         this.projectRoot = projectRoot;
         this.isTestInstance = isTestInstance;
         this.activationEvent = activationEvent;
         this.deviceDiscovery = deviceDiscovery ?? new AdbDeviceDiscovery();
+        this.wirelessAdb = wirelessAdb ?? new WirelessAdb();
         Theme.usePaper(this);
         projectWarning.SetResourceReference(TextBlock.ForegroundProperty, Theme.ERROR);
         FontFamily = new FontFamily("Segoe UI, Microsoft JhengHei UI");
@@ -450,7 +453,7 @@ internal sealed partial class MainWindow : Window {
         menu.Items.Add(createPriorityMenu());
         menu.Items.Add(new Separator());
         var quit = new MenuItem { Header = "結束 StickyTodo" };
-        quit.Click += (_, _) => exit();
+        quit.Click += async (_, _) => await exit();
         menu.Items.Add(quit);
         menu.PlacementTarget = anchor;
         menu.IsOpen = true;
@@ -577,25 +580,30 @@ internal sealed partial class MainWindow : Window {
         Hide();
     }
 
-    private void exit() {
-        if (editor != null) {
-            editor.Close();
-            if (editor?.IsVisible == true) { return; }
-        }
-        if (deviceEditor != null) {
-            deviceEditor.Close();
-            if (deviceEditor?.IsVisible == true) { return; }
-        }
-        saveSettings();
-        isExiting = true;
-        pollTimer.Stop();
-        deviceTimer.Stop();
-        deviceCancellation.Cancel();
-        settingsTimer.Stop();
-        SystemEvents.DisplaySettingsChanged -= onDisplaySettingsChanged;
-        trayIcon.Visible = false;
-        trayIcon.Dispose();
-        trayImage.Dispose();
-        Application.Current.Shutdown();
+    private async Task exit() {
+        if (isExiting || isRequestingExit) { return; }
+        isRequestingExit = true;
+        try {
+            if (editor != null) {
+                editor.Close();
+                if (editor?.IsVisible == true) { return; }
+            }
+            if (deviceEditor != null) {
+                deviceEditor.Close();
+                if (deviceEditor?.IsVisible == true) { return; }
+            }
+            if (wirelessPairingWindow != null) { await wirelessPairingWindow.closeAndWait(); }
+            saveSettings();
+            isExiting = true;
+            pollTimer.Stop();
+            deviceTimer.Stop();
+            deviceCancellation.Cancel();
+            settingsTimer.Stop();
+            SystemEvents.DisplaySettingsChanged -= onDisplaySettingsChanged;
+            trayIcon.Visible = false;
+            trayIcon.Dispose();
+            trayImage.Dispose();
+            Application.Current.Shutdown();
+        } finally { isRequestingExit = false; }
     }
 }

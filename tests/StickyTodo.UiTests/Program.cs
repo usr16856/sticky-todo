@@ -163,7 +163,11 @@ internal static class Program {
             Console.WriteLine(output);
             Console.WriteLine(discardOutput);
             Console.WriteLine(pickerOutput);
-            MainWindowIntegrationTests.run();
+            // Async WPF handlers must start with the same dispatcher context as a real UI event.
+            application.Dispatcher.Invoke(() => {
+                WirelessPairingTests.run();
+                MainWindowIntegrationTests.run();
+            });
             return 0;
         } catch (Exception exception) {
             Console.WriteLine(exception);

@@ -1,13 +1,10 @@
-using System.Diagnostics;
-using System.Text;
-
 namespace StickyTodo.Core;
 
 public sealed class AdbDeviceDiscovery(Func<IReadOnlyList<string>, CancellationToken, Task<string>>? command = null) : IDeviceDiscovery {
     public async Task<DeviceScanResult> scan(CancellationToken cancellationToken) {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(15));
-        var run = command ?? runCommand;
+        var run = command ?? AdbCommand.run;
         var output = await run(["devices", "-l"], timeout.Token);
         var devices = new Dictionary<string, ConnectedDevice>(StringComparer.Ordinal);
         var warnings = new List<string>();
@@ -45,35 +42,4 @@ public sealed class AdbDeviceDiscovery(Func<IReadOnlyList<string>, CancellationT
             warnings.Count == 0, warnings.Count == 0 ? null : string.Join("\n", warnings));
     }
 
-    private static async Task<string> runCommand(IReadOnlyList<string> arguments, CancellationToken cancellationToken) {
-        var info = new ProcessStartInfo(resolveAdb()) { UseShellExecute = false, CreateNoWindow = true,
-            RedirectStandardOutput = true, RedirectStandardError = true, StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8 };
-        foreach (var argument in arguments) { info.ArgumentList.Add(argument); }
-        using var process = Process.Start(info) ?? throw new IOException("ADB 無法啟動。");
-        var output = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var error = process.StandardError.ReadToEndAsync(cancellationToken);
-        try {
-            await process.WaitForExitAsync(cancellationToken);
-            var text = await output;
-            var errorText = await error;
-            if (process.ExitCode != 0) { throw new IOException("ADB 讀取失敗：" + errorText.Trim()); }
-            return text;
-        } finally {
-            if (!process.HasExited) { process.Kill(); }
-            // Observe redirected reads even when cancellation interrupts the process.
-            try { await Task.WhenAll(output, error); } catch (OperationCanceledException) { }
-        }
-    }
-
-    private static string resolveAdb() {
-        foreach (var root in new[] { Environment.GetEnvironmentVariable("ANDROID_SDK_ROOT"),
-                     Environment.GetEnvironmentVariable("ANDROID_HOME"),
-                     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Android", "Sdk") }) {
-            if (string.IsNullOrWhiteSpace(root)) { continue; }
-            var path = Path.Combine(root, "platform-tools", "adb.exe");
-            if (File.Exists(path)) { return path; }
-        }
-        return "adb.exe";
-    }
 }
