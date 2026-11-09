@@ -26,13 +26,15 @@ internal static class MainWindowIntegrationTests {
         store.save(initial.document, initial.version);
         using var activationEvent = new EventWaitHandle(false, EventResetMode.AutoReset);
         var discovery = new DeviceUsageTests.FakeDiscovery();
-        var main = new MainWindow(projectRoot, store.filePath, Path.Combine(root, "settings"), true, activationEvent, discovery);
+        var wireless = new WirelessPairingTests.FakeWirelessAdb();
+        var main = new MainWindow(projectRoot, store.filePath, Path.Combine(root, "settings"), true, activationEvent, discovery, wireless);
         try {
             Directory.Move(projectRoot, projectRoot + ".offline");
             main.Show();
             main.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
             ProjectRefreshTests.run(main, projectRoot, store);
             DeviceUsageTests.run(main, store, discovery, Path.Combine(root, "settings"));
+            WirelessPairingTests.runMainWindow(main, discovery, wireless);
             edit(main, "A", editor => {
                 var content = input<TextBox>(editor, "TodoContent");
                 check(input<CheckBox>(editor, "SyncMatchingContent").IsChecked == true, "實際主視窗未帶入同步目標");
@@ -84,6 +86,7 @@ internal static class MainWindowIntegrationTests {
                 && saved.document.groups[1].items[0].content == "同步更新\n第二行", "恢復草稿仍同步或覆蓋外部資料");
             Console.WriteLine("PASS 實際主視窗同步存檔、獨立等級與完成狀態、單筆修改、備份、衝突阻擋及草稿另存");
             Console.WriteLine("Integration evidence: " + root);
+            WirelessPairingTests.runExit(main, wireless);
         } finally {
             typeof(MainWindow).GetMethod("exit", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(main, null);
         }
