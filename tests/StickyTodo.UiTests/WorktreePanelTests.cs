@@ -38,10 +38,10 @@ internal static class WorktreePanelTests {
         ["counts"] = new Dictionary<string, int> { ["broken"] = 1, ["active"] = 1, ["keep"] = 1, ["primary"] = 1 }, ["gaps"] = Array.Empty<object>(),
         ["worktrees"] = new object[] {
             new Dictionary<string, object?> { ["project"] = "Main", ["path"] = "C:/repo/Main", ["primary"] = true, ["status"] = "primary" },
-            new Dictionary<string, object?> { ["project"] = "Keep", ["path"] = "C:/wt/keep", ["branch"] = "feature/keep", ["owner"] = "Claude/ui",
+            new Dictionary<string, object?> { ["project"] = "Keep", ["path"] = "C:/wt/keep", ["branch"] = "feature/keep", ["manager"] = "git", ["owner"] = "Claude/ui",
                 ["sizeBytes"] = 1073741824L, ["idleDays"] = 30.0, ["warnings"] = Array.Empty<string>(), ["status"] = "keep" },
             new Dictionary<string, object?> { ["project"] = "Active", ["path"] = "C:/wt/active-with-a-very-long-directory-name-for-wrapping/Active",
-                ["branch"] = "", ["head"] = "0123456789abcdef", ["detached"] = true, ["sizeBytes"] = 1826454690L, ["idleDays"] = 4.3,
+                ["branch"] = "", ["head"] = "0123456789abcdef", ["detached"] = true, ["manager"] = "codex-app", ["sizeBytes"] = 1826454690L, ["idleDays"] = 4.3,
                 ["warnings"] = new[] { "unregistered", "outside-worktree-root" }, ["status"] = "active" },
             new Dictionary<string, object?> { ["project"] = "Broken", ["path"] = "C:/wt/broken", ["locked"] = "initializing", ["broken"] = true,
                 ["warnings"] = new[] { "locked" }, ["sizeBytes"] = 0L, ["idleDays"] = null, ["status"] = "broken" }
@@ -90,10 +90,10 @@ internal static class WorktreePanelTests {
         check(rowIds.SequenceEqual(new[] { "WorktreeRow:C:/wt/broken", "WorktreeRow:C:/wt/active-with-a-very-long-directory-name-for-wrapping/Active",
             "WorktreeRow:C:/wt/keep" }), "列順序錯誤：" + string.Join(",", rowIds));
         var activeText = texts(rows.Children[1]);
-        check(activeText.SequenceEqual(new[] { "Active · 使用中", "detached 0123456 · 負責人未登記",
+        check(activeText.SequenceEqual(new[] { "Active · 使用中", "detached 0123456 · Codex app 管理 · 負責人未登記",
             "C:/wt/active-with-a-very-long-directory-name-for-wrapping/Active", "閒置 4.3 天 · 1.70 GiB", "警示：unregistered, outside-worktree-root" }),
             "列內容錯誤：" + string.Join(" | ", activeText));
-        check(texts(rows.Children[2]).Contains("feature/keep · 負責人：Claude/ui"), "負責人未顯示");
+        check(texts(rows.Children[2]).Contains("feature/keep · Git 管理 · 負責人：Claude/ui"), "管理者或負責人未顯示");
         check(texts(rows.Children[0]).Contains("閒置未知 · 大小未量測"), "損壞列大小顯示錯誤：" + string.Join(" | ", texts(rows.Children[0])));
 
         expander.IsExpanded = true;

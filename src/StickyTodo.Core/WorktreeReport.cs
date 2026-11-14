@@ -30,10 +30,19 @@ public static class WorktreeStatuses {
 
 public sealed record WorktreeEntry(string status, string project, string path, string branch, string head, bool isDetached,
     string owner, string purpose, string keepReason, double? idleDays, long? sizeBytes, IReadOnlyList<string> warnings,
-    bool isBroken = false) {
+    bool isBroken = false, string manager = "") {
     private const double BYTES_PER_GIB = 1024d * 1024 * 1024;
 
     public string statusName => WorktreeStatuses.getName(status);
+
+    // App-managed worktrees are retired through their app, not by Git removal; registry-only rows carry no manager.
+    public string managerText => manager switch {
+        "codex-app" => "Codex app 管理",
+        "claude-app" => "Claude app 管理",
+        "git" => "Git 管理",
+        "" => "管理者未知",
+        _ => "管理：" + manager
+    };
 
     public string branchText => !string.IsNullOrWhiteSpace(branch) ? branch
         : head.Length >= 7 ? (isDetached ? "detached " : "") + head[..7] : "（無分支資訊）";
@@ -100,7 +109,7 @@ public sealed record WorktreeReport(int? schemaVersion, DateTimeOffset? createdA
                 .Select(item => new WorktreeEntry(getString(item, "status"), getString(item, "project"), getString(item, "path"),
                     getString(item, "branch"), getString(item, "head"), getBool(item, "detached"), getString(item, "owner"),
                     getString(item, "purpose"), getString(item, "keepReason"), getDouble(item, "idleDays"), getLong(item, "sizeBytes"),
-                    getStrings(item, "warnings"), getBool(item, "broken")))
+                    getStrings(item, "warnings"), getBool(item, "broken"), getString(item, "manager")))
                 .OrderBy(entry => WorktreeStatuses.getRank(entry.status)).ThenBy(entry => entry.status, StringComparer.Ordinal)
                 .ThenBy(entry => entry.project, StringComparer.OrdinalIgnoreCase).ThenBy(entry => entry.path, StringComparer.Ordinal)
                 .ToList();
