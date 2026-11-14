@@ -63,6 +63,14 @@ internal static class Theme {
         _ => throw new System.ArgumentOutOfRangeException(nameof(state))
     };
 
+    internal static string getWorktreeStatusBrushKey(string status) => status switch {
+        "risk" or "broken" or "stale-registry" or "unlisted" => ERROR,
+        "likely-done" or "unscanned" => DEVICE_IN_USE,
+        "active" => DEVICE_IDLE,
+        "keep" or "locked" => DEVICE_UNMARKED,
+        _ => MUTED
+    };
+
     internal static string getPriorityName(TodoPriority priority) => priority switch {
         TodoPriority.HIGH => "高",
         TodoPriority.LOW => "低",
