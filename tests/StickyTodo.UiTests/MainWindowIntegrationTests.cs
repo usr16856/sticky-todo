@@ -27,7 +27,9 @@ internal static class MainWindowIntegrationTests {
         using var activationEvent = new EventWaitHandle(false, EventResetMode.AutoReset);
         var discovery = new DeviceUsageTests.FakeDiscovery();
         var wireless = new WirelessPairingTests.FakeWirelessAdb();
-        var main = new MainWindow(projectRoot, store.filePath, Path.Combine(root, "settings"), true, activationEvent, discovery, wireless);
+        var worktreeRunner = new WorktreePanelTests.FakeRunner();
+        var main = new MainWindow(projectRoot, store.filePath, Path.Combine(root, "settings"), true, activationEvent, discovery, wireless,
+            worktreeRunner);
         try {
             Directory.Move(projectRoot, projectRoot + ".offline");
             main.Show();
@@ -35,6 +37,7 @@ internal static class MainWindowIntegrationTests {
             ProjectRefreshTests.run(main, projectRoot, store);
             DeviceUsageTests.run(main, store, discovery, Path.Combine(root, "settings"));
             DeviceBatteryTests.run(main, store, discovery, root);
+            WorktreePanelTests.run(main, worktreeRunner, root, Path.Combine(root, "settings"));
             WirelessPairingTests.runMainWindow(main, discovery, wireless);
             edit(main, "A", editor => {
                 var content = input<TextBox>(editor, "TodoContent");

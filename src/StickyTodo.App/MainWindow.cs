@@ -51,12 +51,13 @@ internal sealed partial class MainWindow : Window {
     private bool hasDataError;
 
     internal MainWindow(string projectRoot, string dataPath, string settingsDirectory, bool isTestInstance, EventWaitHandle activationEvent,
-        IDeviceDiscovery? deviceDiscovery = null, IWirelessAdb? wirelessAdb = null) {
+        IDeviceDiscovery? deviceDiscovery = null, IWirelessAdb? wirelessAdb = null, IWorktreeReportRunner? worktreeRunner = null) {
         this.projectRoot = projectRoot;
         this.isTestInstance = isTestInstance;
         this.activationEvent = activationEvent;
         this.deviceDiscovery = deviceDiscovery ?? new AdbDeviceDiscovery();
         this.wirelessAdb = wirelessAdb ?? new WirelessAdb();
+        this.worktreeRunner = worktreeRunner ?? new WorktreeReportRunner();
         Theme.usePaper(this);
         projectWarning.SetResourceReference(TextBlock.ForegroundProperty, Theme.ERROR);
         FontFamily = new FontFamily("Segoe UI, Microsoft JhengHei UI");
@@ -142,7 +143,12 @@ internal sealed partial class MainWindow : Window {
         footer.Children.Add(reloadButton);
         DockPanel.SetDock(footer, Dock.Bottom);
         root.Children.Add(footer);
-        todoScroller.Content = groupPanel;
+        // The weekly worktree overview scrolls with the list so the fixed area keeps its minimum-size layout.
+        initializeWorktreePanel();
+        var scrollContent = new StackPanel();
+        scrollContent.Children.Add(worktreeSurface);
+        scrollContent.Children.Add(groupPanel);
+        todoScroller.Content = scrollContent;
         todoScroller.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
         todoScroller.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
         todoScroller.Margin = new Thickness(0, 10, 0, 0);
@@ -164,7 +170,7 @@ internal sealed partial class MainWindow : Window {
         trayIcon.DoubleClick += (_, _) => Dispatcher.Invoke(showWindow);
         Closing += onClosing;
         LocationChanged += (_, _) => scheduleSettings();
-        SizeChanged += (_, _) => { updateDeviceHeight(); scheduleSettings(); };
+        SizeChanged += (_, _) => { updateDeviceHeight(); updateWorktreeHeight(); scheduleSettings(); };
         settingsTimer.Tick += (_, _) => { settingsTimer.Stop(); saveSettings(); };
         pollTimer.Tick += (_, _) => poll();
         Loaded += (_, _) => {
@@ -175,6 +181,8 @@ internal sealed partial class MainWindow : Window {
             pollTimer.Start();
             deviceTimer.Start();
             _ = refreshDevices();
+            loadWorktreeReport();
+            worktreeTimer.Start();
         };
         SystemEvents.DisplaySettingsChanged += onDisplaySettingsChanged;
         SourceInitialized += (_, _) => applyOpacity();
@@ -597,9 +605,12 @@ internal sealed partial class MainWindow : Window {
             isExiting = true;
             pollTimer.Stop();
             deviceTimer.Stop();
+            worktreeTimer.Stop();
             settingsTimer.Stop();
             deviceCancellation.Cancel();
+            worktreeCancellation.Cancel();
             await deviceScanTask;
+            await worktreeRegenerateTask;
             SystemEvents.DisplaySettingsChanged -= onDisplaySettingsChanged;
             trayIcon.Visible = false;
             trayIcon.Dispose();

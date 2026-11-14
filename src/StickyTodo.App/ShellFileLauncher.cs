@@ -34,6 +34,15 @@ internal static class ShellFileLauncher {
         Process.Start(createDefaultStartInfo(filePath));
     }
 
+    internal static ProcessStartInfo createFolderStartInfo(string folderPath) {
+        if (!Directory.Exists(folderPath)) { throw new DirectoryNotFoundException("找不到資料夾：" + folderPath); }
+        return new ProcessStartInfo(folderPath) { UseShellExecute = true };
+    }
+
+    internal static void openFolder(string folderPath) {
+        Process.Start(createFolderStartInfo(folderPath));
+    }
+
     internal static void chooseApplication(Window owner, string filePath) {
         ensureFileExists(filePath);
         var openAsInfo = new OpenAsInfo { filePath = filePath, fileClass = null, flags = OpenAsInfoFlags.execute };

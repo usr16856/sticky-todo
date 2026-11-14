@@ -10,6 +10,9 @@ public sealed class AppSettings {
     public bool isTopmost { get; set; }
     public bool hideCompleted { get; set; }
     public bool isDevicePanelCollapsed { get; set; }
+    public bool isWorktreePanelCollapsed { get; set; } = true;
+    // Local agent-rules profile; report, Python and script paths are derived from it and never stored in Git.
+    public string? worktreeProfilePath { get; set; }
     public double windowOpacity { get; set; } = 1.0;
     public string lastProject { get; set; } = "其他";
     public List<string> lastProjects { get; set; } = [];
