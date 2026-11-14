@@ -187,7 +187,7 @@ internal sealed partial class MainWindow {
         title.Inlines.Add(state);
         row.Children.Add(title);
         var owner = string.IsNullOrWhiteSpace(entry.owner) ? "負責人未登記" : "負責人：" + entry.owner;
-        row.Children.Add(Theme.label($"{entry.branchText} · {owner}", 12));
+        row.Children.Add(Theme.label($"{entry.branchText} · {entry.managerText} · {owner}", 12));
         var path = Theme.label(entry.path, 11);
         path.SetResourceReference(TextBlock.ForegroundProperty, Theme.MUTED);
         path.ToolTip = entry.path;

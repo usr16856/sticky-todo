@@ -20,19 +20,19 @@ internal static class WorktreeReportTests {
            "registered": false, "owner": "", "purpose": "", "roadmap": "", "keepReason": "", "warnings": [], "dirtyCount": 0,
            "unpushedCommits": 0, "mergedIntoDefault": true, "sizeBytes": 0, "lastActivity": "", "idleDays": 0.1, "status": "primary"},
           {"project": "beta", "path": "C:/wt/beta-keep", "primary": false, "branch": "feature/keep", "head": "2222222222222222222222222222222222222222",
-           "detached": false, "owner": "Claude/abc", "keepReason": "長期保留", "warnings": [], "sizeBytes": 1073741824, "idleDays": 30, "status": "keep"},
+           "detached": false, "manager": "claude-app", "owner": "Claude/abc", "keepReason": "長期保留", "warnings": [], "sizeBytes": 1073741824, "idleDays": 30, "status": "keep"},
           {"project": "Alpha", "path": "C:/wt/alpha-active", "primary": false, "branch": "", "head": "3333333333333333333333333333333333333333",
-           "detached": true, "owner": "", "warnings": ["unregistered", "outside-worktree-root"], "sizeBytes": 1826454690, "idleDays": 4.3,
+           "detached": true, "manager": "git", "owner": "", "warnings": ["unregistered", "outside-worktree-root"], "sizeBytes": 1826454690, "idleDays": 4.3,
            "status": "active"},
           {"project": "Zeta", "path": "C:/wt/zeta-broken", "primary": false, "branch": "", "head": "4444444444444444444444444444444444444444",
-           "detached": true, "locked": "initializing", "broken": true, "warnings": ["locked"], "sizeBytes": 0, "idleDays": null,
+           "detached": true, "locked": "initializing", "broken": true, "manager": "codex-app", "warnings": ["locked"], "sizeBytes": 0, "idleDays": null,
            "status": "broken"},
-          {"project": "alpha", "path": "C:/wt/alpha-broken", "primary": false, "branch": "", "head": "", "detached": true,
+          {"project": "alpha", "path": "C:/wt/alpha-broken", "primary": false, "branch": "", "head": "", "detached": true, "manager": 7,
            "warnings": ["locked", 5], "sizeBytes": 12.7, "idleDays": "bad", "status": "broken"},
           {"project": "Gamma", "path": "C:/wt/gamma-stale", "registered": true, "owner": "Codex/x", "purpose": "舊工作", "status": "stale-registry"},
           {"project": "Beta", "path": "C:/wt/beta-done", "primary": false, "branch": "done", "head": "5555555555555555555555555555555555555555",
            "warnings": [], "sizeBytes": 2147483648, "idleDays": 9.04, "status": "likely-done"},
-          {"project": "Delta", "path": "C:/wt/delta-risk", "primary": false, "branch": "risky", "warnings": ["idle-unpushed-or-uncommitted"],
+          {"project": "Delta", "path": "C:/wt/delta-risk", "primary": false, "branch": "risky", "manager": "future-manager", "warnings": ["idle-unpushed-or-uncommitted"],
            "sizeBytes": 5, "idleDays": 20, "status": "risk"},
           {"project": "Omega", "path": "C:/wt/omega-new", "status": "future-state"},
           "not-an-object"
@@ -81,6 +81,10 @@ internal static class WorktreeReportTests {
             check(stale.branch == "" && stale.sizeBytes == null && stale.sizeText == "大小未知" && stale.warnings.Count == 0
                 && stale.owner == "Codex/x" && !stale.isDetached, "登記表列缺欄位未容錯");
             check(find("C:/wt/beta-done").idleText == "閒置 9 天", "閒置天數格式錯誤");
+            var managers = new[] { "C:/wt/zeta-broken", "C:/wt/beta-keep", "C:/wt/alpha-active", "C:/wt/delta-risk", "C:/wt/alpha-broken",
+                "C:/wt/gamma-stale" }.Select(path => find(path).managerText).ToList();
+            check(managers.SequenceEqual(new[] { "Codex app 管理", "Claude app 管理", "Git 管理", "管理：future-manager", "管理者未知", "管理者未知" }),
+                "管理者顯示錯誤：" + string.Join(",", managers));
         });
         yield return ("工作樹報告格式錯誤明確拒絕", () => {
             foreach (var invalid in new[] { "", "{bad", "[]", "\"text\"", "{}", "{\"worktrees\":{}}", "{\"worktrees\":null}" }) {
