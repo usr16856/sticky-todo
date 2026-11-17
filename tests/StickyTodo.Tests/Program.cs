@@ -240,6 +240,19 @@ var tests = new List<(string name, Action action)> {
             && loaded.lastProject == "SpotCam" && loaded.lastProjects.SequenceEqual(new[] { "SpotCam", "其他" })
             && loaded.collapsedProjects.Contains("A"), "設定遺失");
     }),
+    ("主畫面分頁設定預設待辦、往返保存並修正無效值", () => {
+        var path = Path.Combine(root, "main-section.json");
+        var store = new SettingsStore(path);
+        check(store.read().mainSection == MainSections.TODOS, "預設分頁不是待辦");
+        foreach (var section in new[] { MainSections.DEVICES, MainSections.WORKTREES, MainSections.TODOS }) {
+            store.save(new AppSettings { mainSection = section });
+            check(store.read().mainSection == section, "分頁未保存：" + section);
+        }
+        foreach (var invalid in new[] { "{\"mainSection\":\"unknown\"}", "{\"mainSection\":null}", "{\"mainSection\":\"Devices\"}", "{}" }) {
+            File.WriteAllText(path, invalid);
+            check(store.read().mainSection == MainSections.TODOS, "無效分頁未回到待辦：" + invalid);
+        }
+    }),
     ("舊版單一專案設定自動轉成多選集合", () => {
         var path = Path.Combine(root, "legacy-project.json");
         File.WriteAllText(path, "{\"lastProject\":\"SpotCam\"}");

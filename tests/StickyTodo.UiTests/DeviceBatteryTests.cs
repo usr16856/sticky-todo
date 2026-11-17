@@ -24,6 +24,8 @@ internal static class DeviceBatteryTests {
         var backup = File.ReadAllBytes(store.filePath + ".bak");
         var devices = store.read().document.devices.ToList();
         try {
+            main.selectMainSection(MainSections.DEVICES);
+            main.UpdateLayout();
             setBattery(new(78, DeviceChargingState.CHARGING));
             var label = input<TextBlock>(main, "DeviceBattery:UI-A");
             var edit = input<Button>(main, "EditDevice:UI-A");
@@ -56,6 +58,8 @@ internal static class DeviceBatteryTests {
                 check(input<TextBox>(window, "DeviceUsagePurpose").Text == "電量更新期間保留的裝置草稿"
                     && input<Button>(window, "ReloadDeviceUsage").Visibility == Visibility.Collapsed, "電量更新打斷裝置草稿或造成假衝突");
             });
+            main.selectMainSection(MainSections.TODOS);
+            main.UpdateLayout();
             var todoButton = descendants(main).OfType<Button>().Single(button =>
                 (button.ToolTip as string)?.StartsWith("編輯 A 第 1 項\n", StringComparison.Ordinal) == true);
             open(main, todoButton, window => {
@@ -81,11 +85,16 @@ internal static class DeviceBatteryTests {
                 foreach (var minimum in new[] { false, true }) {
                     main.Width = minimum ? main.MinWidth : originalWidth;
                     main.Height = minimum ? main.MinHeight : originalHeight;
+                    main.selectMainSection(MainSections.TODOS);
                     main.UpdateLayout();
                     var hide = field<CheckBox>(main, "hideBox");
                     var projects = field<ScrollViewer>(main, "todoScroller");
                     check(projects.ViewportHeight >= 30 && hide.TranslatePoint(new Point(), main).Y + hide.ActualHeight < main.ActualHeight,
-                        "電量列在最小視窗擠掉專案清單或操作區域");
+                        "最小視窗擠掉專案清單或待辦操作區域");
+                    main.selectMainSection(MainSections.DEVICES);
+                    main.UpdateLayout();
+                    var battery = input<TextBlock>(main, "DeviceBattery:UI-A");
+                    check(scroller.ViewportHeight >= 30 && battery.IsVisible, "電量列在最小視窗擠掉裝置清單");
                     capture(main, Path.Combine(evidenceDirectory, "device-battery-" + color[1..] + (minimum ? "-minimum" : "") + ".png"));
                 }
             }
@@ -93,6 +102,7 @@ internal static class DeviceBatteryTests {
                 && store.read().document.devices.SequenceEqual(devices), "電量更新修改待辦、備份、使用狀態或更新時間");
             Console.WriteLine("PASS 電量與充電狀態即時更新、失敗/離線清除、焦點捲動與兩種草稿保留、資料備份不變及主題/最小視窗");
         } finally {
+            main.selectMainSection(MainSections.TODOS);
             discovery.error = null;
             discovery.result = initialResult;
             main.Width = originalWidth; main.Height = originalHeight;

@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Threading;
 using StickyTodo.Core;
@@ -18,12 +19,14 @@ internal sealed partial class MainWindow {
     private readonly CancellationTokenSource deviceCancellation = new();
     private Task deviceScanTask = Task.CompletedTask;
     private readonly DispatcherTimer deviceTimer = new() { Interval = TimeSpan.FromSeconds(5) };
-    private readonly Border deviceSurface = new() { Margin = new Thickness(0, 10, 0, 0), CornerRadius = new CornerRadius(6) };
-    private readonly Expander devicesExpander = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch };
+    private readonly Border deviceSurface = new() { CornerRadius = new CornerRadius(6), Padding = new Thickness(0, 0, 0, 4) };
+    private readonly ToggleButton deviceToggle = new();
+    private readonly DockPanel deviceBody = new() { Margin = new Thickness(0, 4, 0, 0) };
     private readonly TextBlock deviceHeading = Theme.label("測試機使用狀態", 15);
     private readonly TextBlock deviceWarning = new() { TextWrapping = TextWrapping.Wrap, FontSize = 12, Visibility = Visibility.Collapsed };
     private readonly StackPanel deviceRows = new();
-    private readonly ScrollViewer deviceScroller = new() { MaxHeight = 220, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+    // Fills the device section, which takes a whole tab in the narrow layout or a share of the side column in the wide one.
+    private readonly ScrollViewer deviceScroller = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
     private readonly Button refreshDevicesButton = new() { Content = "重新整理測試機" };
     private readonly Button pairWirelessButton = new() { Content = "無線配對" };
@@ -39,14 +42,21 @@ internal sealed partial class MainWindow {
 
     private void initializeDevicePanel() {
         deviceSurface.SetResourceReference(Border.BackgroundProperty, "InputSurface");
-        deviceSurface.Child = devicesExpander;
+        var section = new DockPanel();
+        deviceSurface.Child = section;
         deviceHeading.FontWeight = FontWeights.SemiBold;
-        devicesExpander.Header = deviceHeading;
-        devicesExpander.IsExpanded = !settings.isDevicePanelCollapsed;
-        AutomationProperties.SetAutomationId(devicesExpander, "DeviceUsagePanel");
-        devicesExpander.Expanded += (_, _) => { settings.isDevicePanelCollapsed = false; saveSettings(); };
-        devicesExpander.Collapsed += (_, _) => { settings.isDevicePanelCollapsed = true; saveSettings(); };
-        var content = new StackPanel { Margin = new Thickness(0, 4, 0, 0) };
+        deviceToggle.SetResourceReference(StyleProperty, "SectionToggle");
+        deviceToggle.Content = deviceHeading;
+        deviceToggle.IsChecked = !settings.isDevicePanelCollapsed;
+        AutomationProperties.SetAutomationId(deviceToggle, "DeviceUsagePanel");
+        deviceToggle.Checked += (_, _) => setDevicePanelCollapsed(false);
+        deviceToggle.Unchecked += (_, _) => setDevicePanelCollapsed(true);
+        DockPanel.SetDock(deviceToggle, Dock.Top);
+        section.Children.Add(deviceToggle);
+        section.Children.Add(deviceBody);
+        var content = deviceBody;
+        refreshDevicesButton.SetResourceReference(StyleProperty, "CompactButton");
+        pairWirelessButton.SetResourceReference(StyleProperty, "CompactButton");
         refreshDevicesButton.HorizontalAlignment = HorizontalAlignment.Left;
         refreshDevicesButton.HorizontalContentAlignment = HorizontalAlignment.Left;
         refreshDevicesButton.Click += async (_, _) => await refreshDevices();
@@ -55,22 +65,19 @@ internal sealed partial class MainWindow {
         AutomationProperties.SetAutomationId(pairWirelessButton, "OpenWirelessPairing");
         pairWirelessButton.Click += (_, _) => openWirelessPairing();
         actions.Children.Add(pairWirelessButton);
+        DockPanel.SetDock(actions, Dock.Top);
         content.Children.Add(actions);
-        // Match the standard button's text inset: margin 3 + border 1 + padding 12.
-        deviceRows.Margin = new Thickness(16, 0, 0, 0);
-        deviceWarning.Margin = new Thickness(16, 0, 0, 0);
+        deviceRows.Margin = new Thickness(SECTION_TEXT_INSET, 0, 0, 0);
+        deviceWarning.Margin = new Thickness(SECTION_TEXT_INSET, 0, 0, 0);
         deviceWarning.SetResourceReference(TextBlock.ForegroundProperty, Theme.ERROR);
         AutomationProperties.SetAutomationId(deviceWarning, "DeviceScanWarning");
+        DockPanel.SetDock(deviceWarning, Dock.Top);
         content.Children.Add(deviceWarning);
         deviceScroller.Content = deviceRows;
         deviceScroller.Resources[typeof(System.Windows.Controls.Primitives.ScrollBar)] = Application.Current.FindResource("MinimalVerticalScrollBar");
         content.Children.Add(deviceScroller);
-        devicesExpander.Content = content;
-        updateDeviceHeight();
         deviceTimer.Tick += async (_, _) => await refreshDevices();
     }
-
-    private void updateDeviceHeight() => deviceScroller.MaxHeight = Math.Clamp(Height - 350, 32, 220);
 
     internal Task refreshDevices() {
         if (isScanningDevices || isExiting || snapshot == null || hasDataError) { return Task.CompletedTask; }
@@ -92,6 +99,7 @@ internal sealed partial class MainWindow {
             isDeviceScanComplete = result.isComplete;
             deviceWarning.Text = result.warning ?? "";
             deviceWarning.Visibility = string.IsNullOrEmpty(result.warning) ? Visibility.Collapsed : Visibility.Visible;
+            updateDeviceTabAlert();
             adoptSnapshot(store.registerDevices(result.devices), hasConnectionChanges);
             updateBatteryLabels();
         } catch (OperationCanceledException) when (isExiting) { }
@@ -103,6 +111,7 @@ internal sealed partial class MainWindow {
             deviceWarning.Text = exception is OperationCanceledException ? "ADB 讀取逾時，稍後自動重試。"
                 : "測試機資訊尚未更新，稍後自動重試：" + exception.Message;
             deviceWarning.Visibility = Visibility.Visible;
+            updateDeviceTabAlert();
             if (hasConnectionChanges) { renderDevices(); }
             else { updateBatteryLabels(); }
         } finally {
@@ -147,7 +156,9 @@ internal sealed partial class MainWindow {
         deviceRows.Children.Clear();
         batteryLabels.Clear();
         var devices = snapshot?.document.devices ?? [];
-        deviceHeading.Text = $"測試機使用狀態 · {devices.Count(device => device.state == DeviceUsageState.IN_USE)} 使用中 / {devices.Count} 台";
+        var inUseCount = devices.Count(device => device.state == DeviceUsageState.IN_USE);
+        deviceHeading.Text = $"測試機使用狀態 · {inUseCount} 使用中 / {devices.Count} 台";
+        updateDeviceTabBadge(inUseCount, deviceHeading.Text);
         if (devices.Count == 0) {
             deviceRows.Children.Add(Theme.label(isDeviceScanComplete ? "目前沒有已記錄的測試機。" : "等待讀取測試機資訊。", 12));
         }

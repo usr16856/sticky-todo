@@ -34,7 +34,7 @@ internal sealed partial class MainWindow : Window {
     private readonly Button addButton = new() { Content = "＋ 新增待辦", MinHeight = 36 };
     private readonly Button reloadButton = new() { Content = "重新載入", Visibility = Visibility.Collapsed };
     private readonly CheckBox pinBox = new() { Content = "置頂", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 4, 0) };
-    private readonly CheckBox hideBox = new() { Content = "隱藏已完成", Margin = new Thickness(0, 10, 0, 2) };
+    private readonly CheckBox hideBox = new() { Content = "隱藏已完成", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
     private readonly DispatcherTimer pollTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer settingsTimer = new() { Interval = TimeSpan.FromMilliseconds(700) };
     private readonly Forms.NotifyIcon trayIcon;
@@ -93,30 +93,31 @@ internal sealed partial class MainWindow : Window {
         AllowsTransparency = true;
         DockPanel.SetDock(caption, Dock.Top);
         frame.Children.Add(caption);
-        var root = new DockPanel { Margin = new Thickness(16, 0, 16, 12) };
-        var header = new StackPanel();
-        summary.SetResourceReference(TextBlock.ForegroundProperty, Theme.MUTED);
-        summary.Margin = new Thickness(0, 4, 0, 10);
-        header.Children.Add(summary);
-        var toolbar = new DockPanel();
+        // Rows in visual order so Tab moves header → tabs → sections → footer.
+        var root = new Grid { Margin = new Thickness(16, 0, 16, 12) };
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition());
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        // Global row: to-do summary on the left, window options on the right.
+        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 4) };
         var settingsButton = new Button { Content = "設定", ToolTip = "開啟資料檔、開機啟動及結束 App" };
         settingsButton.Click += (_, _) => showSettings(settingsButton);
         DockPanel.SetDock(settingsButton, Dock.Right);
-        toolbar.Children.Add(settingsButton);
+        header.Children.Add(settingsButton);
         pinBox.IsChecked = settings.isTopmost;
         pinBox.Click += (_, _) => { Topmost = pinBox.IsChecked == true; settings.isTopmost = Topmost; saveSettings(); };
         DockPanel.SetDock(pinBox, Dock.Right);
-        toolbar.Children.Add(pinBox);
-        addButton.Click += (_, _) => openEditor(null, -1);
-        toolbar.Children.Add(addButton);
-        header.Children.Add(toolbar);
-        initializeDevicePanel();
-        header.Children.Add(deviceSurface);
-        hideBox.IsChecked = settings.hideCompleted;
-        hideBox.Click += (_, _) => { settings.hideCompleted = hideBox.IsChecked == true; render(); saveSettings(); };
-        header.Children.Add(hideBox);
-        DockPanel.SetDock(header, Dock.Top);
+        header.Children.Add(pinBox);
+        summary.SetResourceReference(TextBlock.ForegroundProperty, Theme.MUTED);
+        summary.VerticalAlignment = VerticalAlignment.Center;
+        summary.TextWrapping = TextWrapping.NoWrap;
+        summary.TextTrimming = TextTrimming.CharacterEllipsis;
+        header.Children.Add(summary);
         root.Children.Add(header);
+        initializeTabBar();
+        Grid.SetRow(tabBar, 1);
+        root.Children.Add(tabBar);
         var footer = new StackPanel();
         var statusRow = new Grid { Margin = new Thickness(0, 8, 0, 0) };
         statusRow.ColumnDefinitions.Add(new ColumnDefinition());
@@ -141,20 +142,30 @@ internal sealed partial class MainWindow : Window {
         footer.Children.Add(projectWarning);
         reloadButton.Click += (_, _) => loadData();
         footer.Children.Add(reloadButton);
-        DockPanel.SetDock(footer, Dock.Bottom);
-        root.Children.Add(footer);
-        // The weekly worktree overview scrolls with the list so the fixed area keeps its minimum-size layout.
-        initializeWorktreePanel();
-        var scrollContent = new StackPanel();
-        scrollContent.Children.Add(worktreeSurface);
-        scrollContent.Children.Add(groupPanel);
-        todoScroller.Content = scrollContent;
+        // To-do section: its own toolbar above the project list.
+        var todoToolbar = new DockPanel();
+        hideBox.IsChecked = settings.hideCompleted;
+        hideBox.Click += (_, _) => { settings.hideCompleted = hideBox.IsChecked == true; render(); saveSettings(); };
+        DockPanel.SetDock(hideBox, Dock.Right);
+        todoToolbar.Children.Add(hideBox);
+        addButton.Click += (_, _) => openEditor(null, -1);
+        todoToolbar.Children.Add(addButton);
+        DockPanel.SetDock(todoToolbar, Dock.Top);
+        todoSection.Children.Add(todoToolbar);
+        todoScroller.Content = groupPanel;
         todoScroller.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
         todoScroller.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
-        todoScroller.Margin = new Thickness(0, 10, 0, 0);
+        todoScroller.Margin = new Thickness(0, 6, 0, 0);
         todoScroller.Resources[typeof(System.Windows.Controls.Primitives.ScrollBar)] =
             Application.Current.FindResource("MinimalVerticalScrollBar");
-        root.Children.Add(todoScroller);
+        todoSection.Children.Add(todoScroller);
+        initializeDevicePanel();
+        initializeWorktreePanel();
+        initializeContentGrid();
+        Grid.SetRow(contentGrid, 2);
+        root.Children.Add(contentGrid);
+        Grid.SetRow(footer, 3);
+        root.Children.Add(footer);
         frame.Children.Add(root);
         Content = frame;
 
@@ -170,7 +181,7 @@ internal sealed partial class MainWindow : Window {
         trayIcon.DoubleClick += (_, _) => Dispatcher.Invoke(showWindow);
         Closing += onClosing;
         LocationChanged += (_, _) => scheduleSettings();
-        SizeChanged += (_, _) => { updateDeviceHeight(); updateWorktreeHeight(); scheduleSettings(); };
+        SizeChanged += (_, _) => { updateLayoutMode(); scheduleSettings(); };
         settingsTimer.Tick += (_, _) => { settingsTimer.Stop(); saveSettings(); };
         pollTimer.Tick += (_, _) => poll();
         Loaded += (_, _) => {

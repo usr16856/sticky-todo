@@ -11,6 +11,8 @@ public sealed class AppSettings {
     public bool hideCompleted { get; set; }
     public bool isDevicePanelCollapsed { get; set; }
     public bool isWorktreePanelCollapsed { get; set; } = true;
+    // Section shown by the narrow tab layout; the wide layout shows every section at once.
+    public string mainSection { get; set; } = MainSections.TODOS;
     // Local agent-rules profile; report, Python and script paths are derived from it and never stored in Git.
     public string? worktreeProfilePath { get; set; }
     public double windowOpacity { get; set; } = 1.0;
@@ -19,6 +21,14 @@ public sealed class AppSettings {
     public List<string> collapsedProjects { get; set; } = [];
     public string themeColor { get; set; } = ThemePalette.DEFAULT_COLOR;
     public List<string> recentThemeColors { get; set; } = [];
+}
+
+public static class MainSections {
+    public const string TODOS = "todos";
+    public const string DEVICES = "devices";
+    public const string WORKTREES = "worktrees";
+
+    public static string normalize(string? section) => section is TODOS or DEVICES or WORKTREES ? section : TODOS;
 }
 
 public sealed class SettingsStore(string filePath) {
@@ -38,6 +48,7 @@ public sealed class SettingsStore(string filePath) {
         }
         settings.windowOpacity = Math.Clamp(settings.windowOpacity, 0.1, 1.0);
         settings.themeColor = ThemePalette.normalize(settings.themeColor);
+        settings.mainSection = MainSections.normalize(settings.mainSection);
         settings.recentThemeColors = ThemePalette.normalizeRecent(settings.recentThemeColors);
         settings.lastProjects = settings.lastProjects
             .Where(project => !string.IsNullOrWhiteSpace(project) && !project.Contains('\n') && !project.Contains('\r'))

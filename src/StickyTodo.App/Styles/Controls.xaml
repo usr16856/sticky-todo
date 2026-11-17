@@ -161,6 +161,12 @@
         </Style.Triggers>
     </Style>
 
+    <!-- Side-panel actions: shorter, same horizontal breathing room. Text inset is margin 2 + border 1 + padding 12
+         (MainWindow.SECTION_TEXT_INSET). -->
+    <Style x:Key="CompactButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Padding" Value="12,4"/>
+        <Setter Property="Margin" Value="2"/>
+    </Style>
     <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
         <Setter Property="Background" Value="#9B4840"/>
         <Setter Property="Foreground" Value="White"/>
@@ -505,30 +511,69 @@
             </ControlTemplate>
         </Setter.Value></Setter>
     </Style>
+    <!-- Collapsible header shared by project groups and the side panels. A header that cannot be clicked
+         (IsHitTestVisible False, used by the narrow tab layout) hides its arrow and keeps the text aligned. -->
+    <Style x:Key="SectionToggle" TargetType="ToggleButton">
+        <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource CompactFocus}"/>
+        <Setter Property="Template"><Setter.Value>
+            <ControlTemplate TargetType="ToggleButton">
+                <Border x:Name="surface" Background="Transparent" CornerRadius="4" Padding="2,5">
+                    <DockPanel>
+                        <Border x:Name="arrowBox" Width="22" DockPanel.Dock="Left">
+                            <Path x:Name="arrow" Data="M 0,0 L 4,4 8,0" Stroke="{DynamicResource Ink}" StrokeThickness="1.5"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5"/>
+                        </Border>
+                        <ContentPresenter VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                    </DockPanel>
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsChecked" Value="True"><Setter TargetName="arrow" Property="RenderTransform"><Setter.Value><RotateTransform Angle="180"/></Setter.Value></Setter></Trigger>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="surface" Property="Background" Value="{DynamicResource HoverSurface}"/></Trigger>
+                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="surface" Property="Background" Value="{DynamicResource PressedSurface}"/></Trigger>
+                    <Trigger Property="IsHitTestVisible" Value="False"><Setter TargetName="arrowBox" Property="Visibility" Value="Collapsed"/></Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+        </Setter.Value></Setter>
+    </Style>
+    <!-- Narrow-layout section tab: the selected tab uses the text color and an accent underline. -->
+    <Style x:Key="SectionTab" TargetType="RadioButton">
+        <Setter Property="Foreground" Value="{DynamicResource Muted}"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Padding" Value="6,7"/>
+        <Setter Property="Margin" Value="0,0,2,0"/>
+        <Setter Property="Template"><Setter.Value>
+            <ControlTemplate TargetType="RadioButton">
+                <Grid Background="Transparent">
+                    <Border x:Name="surface" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="6"
+                            Margin="0,0,0,3" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <Border x:Name="underline" Height="2" Margin="8,0" VerticalAlignment="Bottom" Background="Transparent"/>
+                </Grid>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="surface" Property="Background" Value="{DynamicResource HoverSurface}"/></Trigger>
+                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="surface" Property="Background" Value="{DynamicResource PressedSurface}"/></Trigger>
+                    <Trigger Property="IsChecked" Value="True">
+                        <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+                        <Setter Property="FontWeight" Value="SemiBold"/>
+                        <Setter TargetName="underline" Property="Background" Value="{DynamicResource Accent}"/>
+                    </Trigger>
+                    <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="surface" Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+        </Setter.Value></Setter>
+    </Style>
     <Style TargetType="Expander">
         <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
         <Setter Property="Template"><Setter.Value>
             <ControlTemplate TargetType="Expander">
                 <StackPanel>
                     <ToggleButton IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
-                                  HorizontalContentAlignment="Stretch" FocusVisualStyle="{StaticResource CompactFocus}"
-                                  Content="{TemplateBinding Header}" ContentTemplate="{TemplateBinding HeaderTemplate}">
-                        <ToggleButton.Template><ControlTemplate TargetType="ToggleButton">
-                            <Border x:Name="surface" Background="Transparent" CornerRadius="4" Padding="2,5">
-                                <Grid>
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="22"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                    <Path x:Name="arrow" Data="M 0,0 L 4,4 8,0" Stroke="{DynamicResource Ink}" StrokeThickness="1.5"
-                                          HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5"/>
-                                    <ContentPresenter Grid.Column="1" VerticalAlignment="Center" RecognizesAccessKey="True"/>
-                                </Grid>
-                            </Border>
-                            <ControlTemplate.Triggers>
-                                <Trigger Property="IsChecked" Value="True"><Setter TargetName="arrow" Property="RenderTransform"><Setter.Value><RotateTransform Angle="180"/></Setter.Value></Setter></Trigger>
-                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="surface" Property="Background" Value="{DynamicResource HoverSurface}"/></Trigger>
-                                <Trigger Property="IsPressed" Value="True"><Setter TargetName="surface" Property="Background" Value="{DynamicResource PressedSurface}"/></Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate></ToggleButton.Template>
-                    </ToggleButton>
+                                  Style="{StaticResource SectionToggle}"
+                                  Content="{TemplateBinding Header}" ContentTemplate="{TemplateBinding HeaderTemplate}"/>
                     <ContentPresenter x:Name="body" Visibility="Collapsed" ContentSource="Content"
                                       HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
                 </StackPanel>

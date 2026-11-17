@@ -166,6 +166,7 @@ internal static class Program {
             // Async WPF handlers must start with the same dispatcher context as a real UI event.
             application.Dispatcher.Invoke(() => {
                 WirelessPairingTests.run();
+                MainLayoutTests.runStartup();
                 MainWindowIntegrationTests.run();
             });
             return 0;
