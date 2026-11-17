@@ -49,9 +49,8 @@ internal static class WorktreePanelTests {
     });
 
     internal static void run(MainWindow main, FakeRunner runner, string root, string settingsDirectory) {
-        var projects = field<ScrollViewer>(main, "todoScroller");
-        var hideBox = field<CheckBox>(main, "hideBox");
-        var expander = field<Expander>(main, "worktreesExpander");
+        var expander = field<System.Windows.Controls.Primitives.ToggleButton>(main, "worktreeToggle");
+        var badge = field<TextBlock>(main, "worktreeTabBadge");
         var heading = field<TextBlock>(main, "worktreeHeading");
         var counts = field<TextBlock>(main, "worktreeCounts");
         var alert = field<TextBlock>(main, "worktreeAlert");
@@ -59,13 +58,12 @@ internal static class WorktreePanelTests {
         var openFolder = field<Button>(main, "openWorktreeFolderButton");
         var rows = field<StackPanel>(main, "worktreeRows");
         var surface = field<Border>(main, "worktreeSurface");
+        main.selectMainSection(MainSections.WORKTREES);
         main.UpdateLayout();
-        check(!expander.IsExpanded && heading.Text == "工作樹 · 未設定" && !regenerate.IsEnabled && !openFolder.IsEnabled
-            && alert.Visibility == Visibility.Collapsed, "未設定狀態錯誤");
-        var groups = field<StackPanel>(main, "groupPanel");
-        check(surface.Parent is StackPanel content && projects.Content == content && content.Children.IndexOf(surface) == 0
-            && content.Children.IndexOf(groups) == 1 && hideBox.TranslatePoint(new Point(), main).Y < surface.TranslatePoint(new Point(), main).Y,
-            "工作樹區域不在專案清單最上方");
+        check(expander.IsChecked != true && heading.Text == "工作樹 · 未設定" && !regenerate.IsEnabled && !openFolder.IsEnabled
+            && alert.Visibility == Visibility.Collapsed && badge.Visibility == Visibility.Collapsed, "未設定狀態錯誤");
+        check(surface.Parent == field<Grid>(main, "sideColumn") && surface.IsVisible && rows.IsVisible,
+            "工作樹分頁未顯示完整區域（窄版分頁不受寬版收合影響）");
 
         var directory = Path.Combine(root, "worktree-panel");
         var reportDirectory = Path.Combine(directory, "報告");
@@ -80,12 +78,15 @@ internal static class WorktreePanelTests {
         main.setWorktreeProfile(profile);
         check(heading.Text == "工作樹 · 尚無報告" && alert.Visibility == Visibility.Visible && alert.Text.Contains("找不到報告")
             && regenerate.IsEnabled && openFolder.IsEnabled, "缺少報告未提示：" + alert.Text);
+        check(badge.Visibility == Visibility.Visible && (field<RadioButton>(main, "worktreeTab").ToolTip as string)!.EndsWith("有警示", StringComparison.Ordinal),
+            "工作樹警示未反映到分頁");
         check(new SettingsStore(Path.Combine(settingsDirectory, "settings.json")).read().worktreeProfilePath == profile, "profile 未保存在本機設定");
 
         File.WriteAllText(reportPath, createReport(DateTimeOffset.Now.AddHours(-2)));
         main.loadWorktreeReport(false);
         check(heading.Text == "工作樹 · 3 個" && counts.Text == "有風險 0 · 可能已完成 0 · 損壞 1 · 使用中 1 · 保留 1"
-            && alert.Visibility == Visibility.Collapsed, $"報告標題或計數錯誤：{heading.Text} / {counts.Text} / {alert.Text}");
+            && alert.Visibility == Visibility.Collapsed && badge.Visibility == Visibility.Collapsed,
+            $"報告標題、計數或分頁警示錯誤：{heading.Text} / {counts.Text} / {alert.Text}");
         var rowIds = rows.Children.OfType<StackPanel>().Select(row => AutomationProperties.GetAutomationId(row)).ToList();
         check(rowIds.SequenceEqual(new[] { "WorktreeRow:C:/wt/broken", "WorktreeRow:C:/wt/active-with-a-very-long-directory-name-for-wrapping/Active",
             "WorktreeRow:C:/wt/keep" }), "列順序錯誤：" + string.Join(",", rowIds));
@@ -96,17 +97,15 @@ internal static class WorktreePanelTests {
         check(texts(rows.Children[2]).Contains("feature/keep · Git 管理 · 負責人：Claude/ui"), "管理者或負責人未顯示");
         check(texts(rows.Children[0]).Contains("閒置未知 · 大小未量測"), "損壞列大小顯示錯誤：" + string.Join(" | ", texts(rows.Children[0])));
 
-        expander.IsExpanded = true;
+        expander.IsChecked = true;
         main.UpdateLayout();
         check(!new SettingsStore(Path.Combine(settingsDirectory, "settings.json")).read().isWorktreePanelCollapsed, "未記住展開狀態");
+        var worktreeScroller = field<ScrollViewer>(main, "worktreeScroller");
         var originalHeight = main.Height;
         main.Height = main.MinHeight;
         main.UpdateLayout();
-        check(projects.ViewportHeight >= 30 && hideBox.TranslatePoint(new Point(), main).Y + hideBox.ActualHeight < main.ActualHeight,
-            $"兩區展開時最小視窗擠掉專案清單：viewport={projects.ViewportHeight}");
-        main.Height = 520;
-        main.UpdateLayout();
-        checkWheelForwarding(main, projects);
+        check(worktreeScroller.ViewportHeight >= 30 && worktreeScroller.ScrollableHeight > 0,
+            $"最小視窗時工作樹分頁擠掉清單或無法捲動：viewport={worktreeScroller.ViewportHeight}, scrollable={worktreeScroller.ScrollableHeight}");
         main.Height = originalHeight;
         main.UpdateLayout();
         var screenshot = render(surface, Path.Combine(root, "worktree-panel.png"));
@@ -114,10 +113,11 @@ internal static class WorktreePanelTests {
         // Time alone can make an unchanged report stale.
         main.worktreeClock = () => DateTimeOffset.Now.AddDays(9);
         main.loadWorktreeReport(false);
-        check(alert.Visibility == Visibility.Visible && alert.Text.Contains("天未更新"), "檔案未變時未隨時間顯示過期：" + alert.Text);
+        check(alert.Visibility == Visibility.Visible && alert.Text.Contains("天未更新") && badge.Visibility == Visibility.Visible,
+            "檔案未變時未隨時間顯示過期：" + alert.Text);
         main.worktreeClock = () => DateTimeOffset.Now;
         main.loadWorktreeReport(false);
-        check(alert.Visibility == Visibility.Collapsed, "時間恢復後過期警示未清除");
+        check(alert.Visibility == Visibility.Collapsed && badge.Visibility == Visibility.Collapsed, "時間恢復後過期警示未清除");
 
         File.WriteAllText(reportPath, createReport(DateTimeOffset.Now.AddDays(-10)) + "\n");
         main.loadWorktreeReport(false);
@@ -178,36 +178,11 @@ internal static class WorktreePanelTests {
         main.setWorktreeProfile(null);
         check(heading.Text == "工作樹 · 未設定" && alert.Visibility == Visibility.Collapsed, "清除設定後狀態錯誤");
         check(File.Exists(reportPath) && Directory.GetFiles(reportDirectory).Length == 1, "面板改動了報告資料夾");
-        expander.IsExpanded = false;
+        expander.IsChecked = false;
+        main.selectMainSection(MainSections.TODOS);
         check(runner.calls.Count == 4, "產生次數錯誤");
-        Console.WriteLine("PASS 工作樹面板未設定、缺檔、載入排序與計數、過期與損壞警示、背景產生停用與重新載入、失敗訊息、profile 錯誤、收合保存與最小視窗");
+        Console.WriteLine("PASS 工作樹面板未設定、缺檔、載入排序與計數、過期與損壞警示及分頁警示、背景產生停用與重新載入、失敗訊息、profile 錯誤、收合保存與最小視窗");
         Console.WriteLine(screenshot);
-    }
-
-    private static void checkWheelForwarding(MainWindow main, ScrollViewer projects) {
-        var inner = field<ScrollViewer>(main, "worktreeScroller");
-        check(inner.ScrollableHeight > 0 && projects.ScrollableHeight > 0, $"滾輪測試前提不成立：inner={inner.ScrollableHeight}, outer={projects.ScrollableHeight}");
-        void wheel(int delta) {
-            var preview = new System.Windows.Input.MouseWheelEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0, delta) {
-                RoutedEvent = UIElement.PreviewMouseWheelEvent };
-            inner.RaiseEvent(preview);
-            if (!preview.Handled) {
-                inner.RaiseEvent(new System.Windows.Input.MouseWheelEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0, delta) {
-                    RoutedEvent = UIElement.MouseWheelEvent });
-            }
-            main.UpdateLayout();
-        }
-        projects.ScrollToTop(); inner.ScrollToTop(); main.UpdateLayout();
-        wheel(-120);
-        check(inner.VerticalOffset > 0 && projects.VerticalOffset == 0, "工作樹清單中段滾輪未捲動內層");
-        inner.ScrollToBottom(); main.UpdateLayout();
-        wheel(-120);
-        check(projects.VerticalOffset > 0, "工作樹清單到底後滾輪未交給專案清單");
-        var outerOffset = projects.VerticalOffset;
-        inner.ScrollToTop(); main.UpdateLayout();
-        wheel(120);
-        check(projects.VerticalOffset < outerOffset && inner.VerticalOffset == 0, "工作樹清單到頂後向上滾輪未交給專案清單");
-        projects.ScrollToTop(); inner.ScrollToTop(); main.UpdateLayout();
     }
 
     private static string render(FrameworkElement surface, string path) {

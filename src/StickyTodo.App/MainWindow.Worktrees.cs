@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Threading;
 using Microsoft.Win32;
@@ -20,14 +21,16 @@ internal sealed partial class MainWindow {
     private readonly CancellationTokenSource worktreeCancellation = new();
     private Task worktreeRegenerateTask = Task.CompletedTask;
     private readonly DispatcherTimer worktreeTimer = new() { Interval = TimeSpan.FromSeconds(30) };
-    private readonly Border worktreeSurface = new() { Margin = new Thickness(0, 0, 0, 8), CornerRadius = new CornerRadius(6) };
-    private readonly Expander worktreesExpander = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch };
+    private readonly Border worktreeSurface = new() { CornerRadius = new CornerRadius(6), Padding = new Thickness(0, 0, 0, 4) };
+    private readonly ToggleButton worktreeToggle = new();
+    private readonly DockPanel worktreeBody = new() { Margin = new Thickness(0, 4, 0, 0) };
     private readonly TextBlock worktreeHeading = Theme.label("工作樹", 15);
     private readonly TextBlock worktreeCounts = Theme.label("", 12);
     private readonly TextBlock worktreeAlert = new() { TextWrapping = TextWrapping.Wrap, FontSize = 12, Visibility = Visibility.Collapsed };
     private readonly TextBlock worktreeInfo = Theme.label("", 11);
     private readonly StackPanel worktreeRows = new();
-    private readonly ScrollViewer worktreeScroller = new() { MaxHeight = 220, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+    // Fills the worktree section like the device list; the section no longer sits inside the project scroller.
+    private readonly ScrollViewer worktreeScroller = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
     private readonly Button regenerateWorktreesButton = new() { Content = "重新產生報告" };
     private readonly Button openWorktreeFolderButton = new() { Content = "開啟報告資料夾" };
@@ -43,7 +46,8 @@ internal sealed partial class MainWindow {
 
     private void initializeWorktreePanel() {
         worktreeSurface.SetResourceReference(Border.BackgroundProperty, "InputSurface");
-        worktreeSurface.Child = worktreesExpander;
+        var section = new DockPanel();
+        worktreeSurface.Child = section;
         worktreeHeading.FontWeight = FontWeights.SemiBold;
         worktreeCounts.SetResourceReference(TextBlock.ForegroundProperty, Theme.MUTED);
         worktreeAlert.SetResourceReference(TextBlock.ForegroundProperty, Theme.ERROR);
@@ -53,13 +57,20 @@ internal sealed partial class MainWindow {
         header.Children.Add(worktreeHeading);
         header.Children.Add(worktreeCounts);
         header.Children.Add(worktreeAlert);
-        worktreesExpander.Header = header;
-        worktreesExpander.IsExpanded = !settings.isWorktreePanelCollapsed;
-        AutomationProperties.SetAutomationId(worktreesExpander, "WorktreePanel");
-        worktreesExpander.Expanded += (_, _) => { settings.isWorktreePanelCollapsed = false; saveSettings(); };
-        worktreesExpander.Collapsed += (_, _) => { settings.isWorktreePanelCollapsed = true; saveSettings(); };
-        var content = new StackPanel { Margin = new Thickness(0, 4, 0, 0) };
+        worktreeToggle.SetResourceReference(StyleProperty, "SectionToggle");
+        worktreeToggle.Content = header;
+        worktreeToggle.IsChecked = !settings.isWorktreePanelCollapsed;
+        AutomationProperties.SetAutomationId(worktreeToggle, "WorktreePanel");
+        worktreeToggle.Checked += (_, _) => setWorktreePanelCollapsed(false);
+        worktreeToggle.Unchecked += (_, _) => setWorktreePanelCollapsed(true);
+        DockPanel.SetDock(worktreeToggle, Dock.Top);
+        section.Children.Add(worktreeToggle);
+        section.Children.Add(worktreeBody);
+        var content = worktreeBody;
         var actions = new WrapPanel();
+        regenerateWorktreesButton.SetResourceReference(StyleProperty, "CompactButton");
+        openWorktreeFolderButton.SetResourceReference(StyleProperty, "CompactButton");
+        chooseWorktreeProfileButton.SetResourceReference(StyleProperty, "CompactButton");
         AutomationProperties.SetAutomationId(regenerateWorktreesButton, "RegenerateWorktreeReport");
         ToolTipService.SetShowOnDisabled(regenerateWorktreesButton, true);
         regenerateWorktreesButton.Click += async (_, _) => await regenerateWorktreeReport();
@@ -72,35 +83,19 @@ internal sealed partial class MainWindow {
         ToolTipService.SetShowOnDisabled(chooseWorktreeProfileButton, true);
         chooseWorktreeProfileButton.Click += (_, _) => chooseWorktreeProfile();
         actions.Children.Add(chooseWorktreeProfileButton);
+        DockPanel.SetDock(actions, Dock.Top);
         content.Children.Add(actions);
-        // Match the standard button's text inset like the device panel.
-        worktreeInfo.Margin = new Thickness(16, 0, 0, 2);
+        worktreeInfo.Margin = new Thickness(SECTION_TEXT_INSET, 0, 0, 2);
         worktreeInfo.SetResourceReference(TextBlock.ForegroundProperty, Theme.MUTED);
         AutomationProperties.SetAutomationId(worktreeInfo, "WorktreeReportInfo");
+        DockPanel.SetDock(worktreeInfo, Dock.Top);
         content.Children.Add(worktreeInfo);
-        worktreeRows.Margin = new Thickness(16, 0, 0, 0);
+        worktreeRows.Margin = new Thickness(SECTION_TEXT_INSET, 0, 0, 0);
         worktreeScroller.Content = worktreeRows;
-        worktreeScroller.PreviewMouseWheel += forwardWorktreeWheel;
         worktreeScroller.Resources[typeof(System.Windows.Controls.Primitives.ScrollBar)] = Application.Current.FindResource("MinimalVerticalScrollBar");
         content.Children.Add(worktreeScroller);
-        worktreesExpander.Content = content;
-        updateWorktreeHeight();
         worktreeTimer.Tick += (_, _) => loadWorktreeReport(false);
         renderWorktrees();
-    }
-
-    // The rows scroll inside the panel so an expanded report does not push every project far down the list;
-    // the panel itself sits in the project scroller, so keep it below the list viewport at the default size.
-    private void updateWorktreeHeight() => worktreeScroller.MaxHeight = Math.Clamp(Height - 420, 60, 320);
-
-    // A nested ScrollViewer swallows the wheel even at its ends; hand it to the project list instead.
-    private void forwardWorktreeWheel(object sender, System.Windows.Input.MouseWheelEventArgs args) {
-        var isAtEdge = args.Delta > 0 ? worktreeScroller.VerticalOffset <= 0
-            : worktreeScroller.VerticalOffset >= worktreeScroller.ScrollableHeight;
-        if (!isAtEdge) { return; }
-        args.Handled = true;
-        todoScroller.RaiseEvent(new System.Windows.Input.MouseWheelEventArgs(args.MouseDevice, args.Timestamp, args.Delta) {
-            RoutedEvent = UIElement.MouseWheelEvent, Source = sender });
     }
 
     internal void loadWorktreeReport(bool force = true) {
@@ -205,6 +200,7 @@ internal sealed partial class MainWindow {
         var text = string.Join("\n", alerts.Select(alert => "⚠ " + alert));
         if (worktreeAlert.Text != text) { worktreeAlert.Text = text; }
         worktreeAlert.Visibility = alerts.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        updateWorktreeTabBadge(alerts.Count > 0, worktreeHeading.Text);
     }
 
     private void updateWorktreeButtons() {

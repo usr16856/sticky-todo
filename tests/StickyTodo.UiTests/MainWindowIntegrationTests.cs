@@ -37,6 +37,7 @@ internal static class MainWindowIntegrationTests {
             ProjectRefreshTests.run(main, projectRoot, store);
             DeviceUsageTests.run(main, store, discovery, Path.Combine(root, "settings"));
             DeviceBatteryTests.run(main, store, discovery, root);
+            MainLayoutTests.run(main, store, discovery, Path.Combine(root, "settings"), root);
             WorktreePanelTests.run(main, worktreeRunner, root, Path.Combine(root, "settings"));
             WirelessPairingTests.runMainWindow(main, discovery, wireless);
             edit(main, "A", editor => {
@@ -97,6 +98,7 @@ internal static class MainWindowIntegrationTests {
     }
 
     private static void edit(MainWindow main, string project, Action<EditorWindow> action) {
+        main.selectMainSection(MainSections.TODOS);
         main.UpdateLayout();
         main.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
         var editButton = descendants(main).OfType<Button>().Single(button => (button.ToolTip as string)?.StartsWith($"編輯 {project} 第 1 項\n", StringComparison.Ordinal) == true);

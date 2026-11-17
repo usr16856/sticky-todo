@@ -30,6 +30,9 @@ internal static class DeviceUsageTests {
 
     internal static void run(MainWindow main, TodoStore store, FakeDiscovery discovery, string settingsDirectory) {
         var initialTasks = store.read().document.clone();
+        // Hidden tabs are not laid out, so their rows are not in the visual tree until the section is shown.
+        main.selectMainSection(MainSections.DEVICES);
+        main.UpdateLayout();
         check(field<DispatcherTimer>(main, "deviceTimer").Interval == TimeSpan.FromSeconds(5), "背景掃描頻率錯誤");
         discovery.result = new([new("UI-A", "測試手機"), new("UI-B", "測試平板")]);
         waitFor(() => store.read().document.devices.Count == 2, "五秒計時器未自動登記真機");
@@ -42,32 +45,40 @@ internal static class DeviceUsageTests {
         check(ReferenceEquals(editButton, input<Button>(main, "EditDevice:UI-A")), "相同掃描結果重建控制項，可能打斷焦點");
         check(File.ReadAllBytes(store.filePath).SequenceEqual(bytes) && File.ReadAllBytes(store.filePath + ".bak").SequenceEqual(backup), "定期掃描反覆寫檔");
 
-        var panel = input<Expander>(main, "DeviceUsagePanel");
+        var panel = input<System.Windows.Controls.Primitives.ToggleButton>(main, "DeviceUsagePanel");
+        main.selectMainSection(MainSections.DEVICES);
         main.UpdateLayout();
         var refreshText = descendants(field<Button>(main, "refreshDevicesButton")).OfType<TextBlock>().Single();
         var deviceTitle = descendants(field<StackPanel>(main, "deviceRows")).OfType<TextBlock>().First(text =>
             new System.Windows.Documents.TextRange(text.ContentStart, text.ContentEnd).Text.StartsWith("測試", StringComparison.Ordinal));
         check(Math.Abs(refreshText.TranslatePoint(new Point(), main).X - deviceTitle.TranslatePoint(new Point(), main).X) < 1,
             "重新整理文字沒有與裝置名稱左緣對齊");
-        var hideBox = field<CheckBox>(main, "hideBox");
-        var projects = field<ScrollViewer>(main, "todoScroller");
-        var panelTop = panel.TranslatePoint(new Point(), main).Y;
-        check(panelTop + panel.ActualHeight <= hideBox.TranslatePoint(new Point(), main).Y, "測試機區域不在隱藏已完成上方");
-        projects.ScrollToVerticalOffset(120);
-        main.UpdateLayout();
-        check(projects.VerticalOffset > 0 && Math.Abs(panel.TranslatePoint(new Point(), main).Y - panelTop) < 1,
-            "測試機區域跟著專案清單捲動");
+        // Placement next to or instead of the project list is covered by MainLayoutTests; here the tab must keep
+        // the device list and its actions usable at the minimum window size.
+        var deviceScroller = field<ScrollViewer>(main, "deviceScroller");
         var originalHeight = main.Height;
         main.Height = main.MinHeight;
         main.UpdateLayout();
-        check(projects.ViewportHeight >= 30 && hideBox.TranslatePoint(new Point(), main).Y + hideBox.ActualHeight < main.ActualHeight,
-            $"最小視窗時固定區域擠掉專案清單或隱藏已完成：viewport={projects.ViewportHeight}, hideY={hideBox.TranslatePoint(new Point(), main).Y}, height={main.ActualHeight}");
+        var refreshButton = field<Button>(main, "refreshDevicesButton");
+        check(deviceScroller.ViewportHeight >= 30 && refreshButton.TranslatePoint(new Point(), main).Y + refreshButton.ActualHeight < main.ActualHeight,
+            $"最小視窗時測試機分頁擠掉裝置清單或操作：viewport={deviceScroller.ViewportHeight}, height={main.ActualHeight}");
         main.Height = originalHeight;
-        projects.ScrollToTop();
         main.UpdateLayout();
-        panel.IsExpanded = false;
-        check(new SettingsStore(Path.Combine(settingsDirectory, "settings.json")).read().isDevicePanelCollapsed, "未記住收合狀態");
-        panel.IsExpanded = true;
+        var originalWidth = main.Width;
+        try {
+            main.Width = MainWindow.WIDE_LAYOUT_MIN_WIDTH + 140;
+            main.Height = MainWindow.WIDE_LAYOUT_MIN_HEIGHT + 100;
+            main.UpdateLayout();
+            panel.IsChecked = false;
+            main.UpdateLayout();
+            check(new SettingsStore(Path.Combine(settingsDirectory, "settings.json")).read().isDevicePanelCollapsed
+                && field<DockPanel>(main, "deviceBody").Visibility == Visibility.Collapsed, "寬版未收合或未記住收合狀態");
+        } finally {
+            panel.IsChecked = true;
+            main.Width = originalWidth;
+            main.Height = originalHeight;
+            main.UpdateLayout();
+        }
         renderRefreshStates(main, Path.GetDirectoryName(store.filePath)!);
         openDevice(main, "UI-A", editor => {
             choose(editor, DeviceUsageState.IN_USE);

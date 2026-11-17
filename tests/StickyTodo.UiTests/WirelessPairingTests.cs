@@ -206,20 +206,26 @@ internal static class WirelessPairingTests {
     }
 
     internal static void runMainWindow(MainWindow main, DeviceUsageTests.FakeDiscovery discovery, FakeWirelessAdb wireless) {
-        var scans = discovery.calls;
-        var pending = new TaskCompletionSource<DeviceScanResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-        discovery.pending = pending;
-        var scan = main.refreshDevices();
-        openMainWindow(main, window => {
-            input<TextBox>(window, "WirelessPairingCode").Text = "012345";
-            click(window, "PairWirelessDevice");
-            check(wireless.pairs == 1 && text(window, "WirelessConnectionStatus") == "已連線", "主視窗未接上配對服務");
-            discovery.pending = null;
-            pending.SetResult(discovery.result);
-            waitFor(() => scan.IsCompleted, "既有掃描結束後未完成配對後刷新");
-            scan.GetAwaiter().GetResult();
-            check(discovery.calls == scans + 2, "配對成功未排入掃描後的清單刷新");
-        });
+        // The five-second background scan is unrelated to the queued refresh; an overdue tick would fire as soon as the
+        // dialog pumps the dispatcher and add one scan, so it is paused while counting.
+        var deviceTimer = field<DispatcherTimer>(main, "deviceTimer");
+        deviceTimer.Stop();
+        try {
+            var scans = discovery.calls;
+            var pending = new TaskCompletionSource<DeviceScanResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+            discovery.pending = pending;
+            var scan = main.refreshDevices();
+            openMainWindow(main, window => {
+                input<TextBox>(window, "WirelessPairingCode").Text = "012345";
+                click(window, "PairWirelessDevice");
+                check(wireless.pairs == 1 && text(window, "WirelessConnectionStatus") == "已連線", "主視窗未接上配對服務");
+                discovery.pending = null;
+                pending.SetResult(discovery.result);
+                waitFor(() => scan.IsCompleted, "既有掃描結束後未完成配對後刷新");
+                scan.GetAwaiter().GetResult();
+                check(discovery.calls == scans + 2, $"配對成功未排入掃描後的清單刷新：before={scans}, after={discovery.calls}");
+            });
+        } finally { deviceTimer.Start(); }
         Console.WriteLine("PASS 主視窗無線配對入口、服務注入與掃描重疊時刷新清單");
     }
 
