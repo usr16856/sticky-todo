@@ -40,6 +40,10 @@ internal sealed partial class MainWindow : Window {
     private readonly Forms.NotifyIcon trayIcon;
     private readonly Slider opacitySlider = new() { Minimum = 10, Maximum = 100, SmallChange = 1, LargeChange = 10,
         TickFrequency = 1, IsSnapToTickEnabled = true, Width = 100, Height = 24, VerticalAlignment = VerticalAlignment.Top };
+    // Fades with the opacity setting; the slider sits in an overlay above it so it stays fully opaque.
+    private readonly DockPanel fadingLayer = new();
+    private readonly Canvas opacityOverlay = new();
+    private readonly Border opacitySliderSlot = new() { VerticalAlignment = VerticalAlignment.Top };
     private double appliedOpacity = 1.0;
     private bool isApplyingOpacity;
     private readonly System.Drawing.Icon trayImage;
@@ -59,6 +63,8 @@ internal sealed partial class MainWindow : Window {
         this.wirelessAdb = wirelessAdb ?? new WirelessAdb();
         this.worktreeRunner = worktreeRunner ?? new WorktreeReportRunner();
         Theme.usePaper(this);
+        // The paper is painted by fadingLayer, so the window itself must not paint an opaque background.
+        Background = Brushes.Transparent;
         projectWarning.SetResourceReference(TextBlock.ForegroundProperty, Theme.ERROR);
         FontFamily = new FontFamily("Segoe UI, Microsoft JhengHei UI");
         FontSize = 14;
@@ -87,7 +93,7 @@ internal sealed partial class MainWindow : Window {
         } else {
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
         }
-        var frame = new DockPanel();
+        var frame = fadingLayer;
         frame.SetResourceReference(Panel.BackgroundProperty, Theme.PAPER);
         var caption = new WindowHeader(this);
         AllowsTransparency = true;
@@ -136,8 +142,12 @@ internal sealed partial class MainWindow : Window {
             }));
         opacitySlider.AddHandler(System.Windows.Controls.Primitives.Thumb.DragCompletedEvent,
             new System.Windows.Controls.Primitives.DragCompletedEventHandler((_, _) => opacityHint.IsOpen = false));
-        Grid.SetColumn(opacitySlider, 1);
-        statusRow.Children.Add(opacitySlider);
+        // The slot reserves the slider's place in the footer; the slider itself is drawn in opacityOverlay.
+        opacitySliderSlot.Width = opacitySlider.Width;
+        opacitySliderSlot.Height = opacitySlider.Height;
+        Grid.SetColumn(opacitySliderSlot, 1);
+        statusRow.Children.Add(opacitySliderSlot);
+        opacityOverlay.Children.Add(opacitySlider);
         footer.Children.Add(statusRow);
         footer.Children.Add(projectWarning);
         reloadButton.Click += (_, _) => loadData();
@@ -167,7 +177,11 @@ internal sealed partial class MainWindow : Window {
         Grid.SetRow(footer, 3);
         root.Children.Add(footer);
         frame.Children.Add(root);
-        Content = frame;
+        var shell = new Grid();
+        shell.Children.Add(frame);
+        shell.Children.Add(opacityOverlay);
+        Content = shell;
+        opacitySliderSlot.LayoutUpdated += (_, _) => placeOpacitySlider();
 
         using (var iconStream = Application.GetResourceStream(iconUri).Stream)
         using (var resourceIcon = new System.Drawing.Icon(iconStream, Forms.SystemInformation.SmallIconSize)) {
@@ -208,7 +222,7 @@ internal sealed partial class MainWindow : Window {
         if (handle == IntPtr.Zero) { return; }
         isApplyingOpacity = true;
         try {
-            Opacity = opacitySlider.Value / 100.0;
+            fadingLayer.Opacity = opacitySlider.Value / 100.0;
             appliedOpacity = opacitySlider.Value / 100.0;
             settings.windowOpacity = appliedOpacity;
             scheduleSettings();
@@ -221,6 +235,14 @@ internal sealed partial class MainWindow : Window {
             opacityHint.Content = opacitySlider.ToolTip;
             isApplyingOpacity = false;
         }
+    }
+
+    private void placeOpacitySlider() {
+        if (!opacitySliderSlot.IsVisible) { return; }
+        var position = opacitySliderSlot.TranslatePoint(new Point(0, 0), opacityOverlay);
+        // Compare first: setting an unchanged value still costs a layout pass, and LayoutUpdated fires after every pass.
+        if (Canvas.GetLeft(opacitySlider) != position.X) { Canvas.SetLeft(opacitySlider, position.X); }
+        if (Canvas.GetTop(opacitySlider) != position.Y) { Canvas.SetTop(opacitySlider, position.Y); }
     }
 
     private void loadData() {

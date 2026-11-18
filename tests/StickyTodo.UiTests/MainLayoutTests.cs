@@ -241,6 +241,45 @@ internal static class MainLayoutTests {
         Console.WriteLine("PASS 啟動時套用保存的窄版分頁與寬版尺寸");
     }
 
+    // Lowering the opacity fades the note but never the slider that controls it.
+    internal static void runOpacity() {
+        var root = Path.Combine(Path.GetTempPath(), "StickyTodo.UiTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "projects", "A"));
+        var store = new TodoStore(Path.Combine(root, "data", "TODO.md"));
+        store.initialize();
+        new SettingsStore(Path.Combine(root, "settings", "settings.json")).save(new AppSettings { windowOpacity = 0.3 });
+        using var activation = new EventWaitHandle(false, EventResetMode.AutoReset);
+        var window = new MainWindow(Path.Combine(root, "projects"), store.filePath, Path.Combine(root, "settings"), true, activation,
+            new DeviceUsageTests.FakeDiscovery(), new WirelessPairingTests.FakeWirelessAdb(), new WorktreePanelTests.FakeRunner());
+        try {
+            window.Show();
+            window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+            var slider = field<Slider>(window, "opacitySlider");
+            var fadingLayer = field<DockPanel>(window, "fadingLayer");
+            var slot = field<Border>(window, "opacitySliderSlot");
+            static double effectiveOpacity(DependencyObject element) {
+                var opacity = 1.0;
+                for (var current = element; current != null; current = VisualTreeHelper.GetParent(current)) {
+                    if (current is UIElement visual) { opacity *= visual.Opacity; }
+                }
+                return opacity;
+            }
+            check(window.Opacity == 1.0 && Math.Abs(fadingLayer.Opacity - 0.3) < 0.001, "保存的透明度未套用到便條紙內容");
+            check(effectiveOpacity(slider) == 1.0, "透明度拖曳桿跟著變透明");
+            Console.WriteLine(capture(window, Path.Combine(root, "opacity-30.png")));
+            slider.Value = 55;
+            check(Math.Abs(fadingLayer.Opacity - 0.55) < 0.001 && effectiveOpacity(slider) == 1.0, "調整後拖曳桿或內容透明度錯誤");
+            foreach (var (width, height) in new[] { (400.0, 560.0), (960.0, 640.0) }) {
+                resize(window, width, height);
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                var expected = slot.TranslatePoint(new Point(0, 0), window);
+                var actual = slider.TranslatePoint(new Point(0, 0), window);
+                check(Math.Abs(expected.X - actual.X) < 0.5 && Math.Abs(expected.Y - actual.Y) < 0.5, $"拖曳桿沒有對齊頁尾位置（{width}x{height}）");
+            }
+        } finally { closeWithoutShutdown(window); }
+        Console.WriteLine("PASS 透明度只套用到便條紙內容，拖曳桿保持不透明並對齊頁尾");
+    }
+
     // MainWindow.exit shuts the shared test Application down, so a secondary window is stopped and closed directly.
     private static void closeWithoutShutdown(MainWindow window) {
         typeof(MainWindow).GetField("isExiting", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(window, true);

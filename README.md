@@ -109,6 +109,6 @@ Build 先執行資料層與 WPF 表單測試，再產生符合本機架構的 se
 
 ## 隔離桌面測試
 
-主視窗保留 WindowChrome，使用 WPF `AllowsTransparency` 與 `Opacity`。WPF 會移除直接加入的 `WS_EX_LAYERED`，因此不直接呼叫 `SetLayeredWindowAttributes`，由 WPF 管理透明視窗。
+主視窗保留 WindowChrome，使用 WPF `AllowsTransparency`；不透明度設定套用到便條紙內容層的 `Opacity`，右下角的不透明度拖曳桿放在內容層上方的覆蓋層，維持完全不透明。WPF 會移除直接加入的 `WS_EX_LAYERED`，因此不直接呼叫 `SetLayeredWindowAttributes`，由 WPF 管理透明視窗。
 
 App 接受 `--data-dir`、`--settings-dir`、`--project-root` 指定測試目錄。使用 `--data-dir` 時標題顯示「測試便條紙」並停用開機啟動操作。請同時指定獨立的設定目錄，避免影響正式設定。每個資料目錄只允許一個 App 執行個體。

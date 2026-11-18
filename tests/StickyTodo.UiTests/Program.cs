@@ -167,6 +167,7 @@ internal static class Program {
             application.Dispatcher.Invoke(() => {
                 WirelessPairingTests.run();
                 MainLayoutTests.runStartup();
+                MainLayoutTests.runOpacity();
                 MainWindowIntegrationTests.run();
             });
             return 0;
